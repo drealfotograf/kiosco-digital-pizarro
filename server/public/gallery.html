@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Mi galería</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="login" class="login card col">
+    <div class="row"><div class="logo">P</div><h2 style="margin:0">Mi galería privada</h2></div>
+    <p class="muted" style="margin:0">Introduce el código y la contraseña que te dio el estudio.</p>
+    <input id="code" placeholder="Código" autocapitalize="characters" autocomplete="username">
+    <input id="pass" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <div id="lerr" class="err"></div>
+    <button class="btn primary" id="go">Entrar</button>
+  </div>
+
+  <div id="app" hidden>
+    <header class="bar">
+      <div class="logo">P</div>
+      <h1 id="title"></h1>
+      <span id="favcount" class="muted small"></span>
+      <a id="zipfav" class="btn" hidden>Descargar favoritas</a>
+      <a id="zip" class="btn" hidden>Descargar todo</a>
+      <button class="btn" id="out">Salir</button>
+    </header>
+    <main>
+      <p class="muted">Toca ★ para marcar tus favoritas: el estudio verá tu selección. También puedes imprimirlas en el kiosco de la tienda.</p>
+      <div id="grid" class="grid"></div>
+    </main>
+  </div>
+  <div id="lb" class="lightbox" hidden>
+    <button class="close" id="lbx">×</button>
+    <button class="nav" id="lbp" style="left:0">‹</button>
+    <img id="lbi" alt="">
+    <button class="nav" id="lbn" style="right:0">›</button>
+  </div>
+  <script src="/static/gallery.js"></script>
+</body>
+</html>

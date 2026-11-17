@@ -1,0 +1,373 @@
+# Kiosco Digital Pizarro · Creación y avance del proyecto
+
+> **Lectura obligatoria al iniciar cada sesión.** Este archivo se carga solo al empezar (hook SessionStart),
+> y al cerrar la sesión se añade solo una entrada al registro (hook SessionEnd).
+> Durante la sesión, Claude actualiza «Estado actual», «Decisiones», «Próximos pasos» y el registro del día.
+
+---
+
+## 1. Objetivo
+Aplicación para que los clientes de la tienda pasen sus fotos desde cualquier dispositivo y las impriman o las pidan al laboratorio.
+
+- **Fuentes de fotos:**
+  - Memoria USB y tarjeta de memoria.
+  - Móvil por WiFi (código QR), por cable y por Bluetooth.
+  - Correo electrónico y carpeta compartida en red.
+  - Galería privada.
+- **Impresión:** varios tamaños elegidos por el cliente y varias impresoras.
+- **Laboratorio:** envío al servidor de la tienda para que el laboratorio haga las copias.
+- **Fotos carnet:** formatos de Europa y EEUU, más uno personalizado. Guías de corte activables y lotes de varias personas.
+- **Máscaras y marcos** para eventos.
+- **Galerías de trabajo** con contraseña.
+- **Añadido el 17/11/2026 (segunda tanda):**
+  - Carpeta compartida del servidor de libre acceso desde el kiosco.
+  - Validación de formatos con aviso emergente.
+  - Ampliar con márgenes de color.
+  - Nueva zona de selección con filtros y corrección de color.
+  - Aviso de calidad con tamaño recomendado.
+  - Añadir más fotos sin perder las ya elegidas.
+  - Retener, repetir y reprocesar pedidos, que se guardan 30 días.
+  - Perfil sRGB.
+  - Tarifas con importación y exportación.
+  - Gestión de pedidos por estado.
+  - Tipos de lotes.
+
+**Plataforma:** Windows. Kiosco con pantalla táctil para el cliente y servidor local en la tienda (sin nube).
+
+---
+
+## 2. Arquitectura
+
+| Parte | Tecnología | Carpeta |
+|---|---|---|
+| Kiosco táctil | Electron 37, React 19, Vite 6 y sharp 0.34 | `kiosk/` |
+| Servidor de tienda | Node 24, Express 4, sharp, bcryptjs, archiver y multer; base de datos en JSON | `server/` |
+
+### Kiosco: proceso principal (`kiosk/main/`)
+| Archivo | Función |
+|---|---|
+| `main.js` | Ventana (modo kiosco opcional), todas las llamadas IPC y el protocolo `kimg://` para mostrar imágenes locales con lista blanca de rutas |
+| `preload.cjs` | Puente seguro hacia la interfaz (`window.kiosk.call / on`) |
+| `config.js` | Ajustes en `%APPDATA%/kiosco-pizarro/settings.json`, fusionados con los valores por defecto |
+| `session.js` | Una sesión por cliente con código de 5 caracteres. Importa las fotos (convierte HEIC, corrige la orientación EXIF, genera miniaturas y vistas previas, descarta duplicados) y lo **borra todo al terminar** |
+| `images.js` | Miniaturas bajo demanda con caché, conversión de HEIC y recorrido de carpetas |
+| `render.js` | Render final con sharp a 300 ppp: recorte o encaje, máscara (girada si hace falta), hojas de carnet con guías de corte en SVG y máscaras de ejemplo |
+| `print.js` | Impresión silenciosa con Electron, una cola por impresora y reparto rotativo entre las impresoras de un mismo tamaño. Opción «papel del driver» |
+| `orders.js` | Presupuesto (calculado en el proceso principal, no en la interfaz), render, impresión o envío y registro `orders.log.jsonl`. Números de pedido `KAAMMDD-0001` |
+| `lab.js` | Envío al laboratorio por HTTP (multipart con clave de kiosco) o a una carpeta compartida (con `pedido.json` y `pedido.txt`) |
+| `gallery.js` | Entrada a las galerías del servidor e importación de originales para imprimir |
+| `sources/drives.js` | Detección de USB y tarjetas por WMI, consultada cada 3 s |
+| `sources/mtp.js` y `scripts/mtp.ps1` | Móvil por cable (Android e iPhone, protocolos MTP/PTP) mediante Shell.Application; copia las 300 fotos más recientes de DCIM y Pictures |
+| `sources/upload-server.js` | Servidor web en el puerto 8787. El cliente escanea el QR y sube las fotos desde el navegador. Incluye un QR para conectarse a la WiFi |
+| `sources/email.js` | Lectura del buzón por IMAP (imapflow). Toma los correos no leídos cuyo asunto lleva el código de sesión y guarda sus adjuntos |
+| `sources/bluetooth.js` | Abre el asistente de Windows `fsquirt` y vigila la carpeta donde se reciben los archivos |
+
+### Kiosco: módulos añadidos en la segunda tanda
+| Archivo | Función |
+|---|---|
+| `main/store.js` | Almacén de pedidos en `%APPDATA%/kiosco-pizarro/pedidos/<n.º>/`, con `originales/` y `pedido.json` (todos los ajustes). Estados: held (sin terminar), sent (enviado), printed (impreso), error y processing. Lista, borra y purga los pedidos con más días de los indicados (30 por defecto; se revisa al arrancar y cada 6 h) |
+| `main/orders.js` | `quote` (tramos de precio y lotes), `submitOrder` (guarda y después entrega; si falla, el pedido queda en «Con error»), `holdOrder` (código de 6 caracteres), `repeatOrder` (todo o parte), `retryOrder` |
+| `main/tariffs.js` | Exportación e importación de tarifas en CSV con «;» (copias con tramos, carnet y lotes) |
+| `main/sources/srvshare.js` | Carpeta compartida del servidor: lista, miniaturas y descarga con la clave del kiosco |
+| `shared/color.js` | Doce filtros y la corrección de color (brillo, contraste, saturación y temperatura) como **una sola matriz**. Se aplica igual en la vista previa (feColorMatrix SVG en sRGB) y en el render (sharp recomb + linear) |
+| `shared/quality.js` | Resolución efectiva (ppp) según el recorte; niveles excelente ≥250, buena ≥180, justa ≥120 y baja; tamaño recomendado (el mayor con ≥180 ppp) |
+| `renderer/screens/Studio.jsx` | **Zona de selección:** foto ampliada al máximo arriba, todas las miniaturas abajo y panel con las pestañas Tamaño, Filtros, Color y Marco |
+| `renderer/screens/AdminOrders.jsx` | Pedidos por estado. El detalle muestra fotos, tamaños y copias, con Eliminar, Repetir (todo o lo seleccionado, a impresión o al laboratorio), Reprocesar o Continuar, y Reintentar |
+| `renderer/components/Filmstrip.jsx`, `ColorTools.jsx` | Tira de miniaturas con insignias de copias y de calidad baja; rejilla de filtros y deslizadores de color |
+
+**Flujo nuevo del cliente:**
+1. Elige el origen y se cargan **todos** sus archivos al «carrete», con vistas previas de baja calidad bajo demanda (`kimg://f/thumb?p=…&s=360|1600`).
+2. Si un archivo no es compatible, aparece un aviso y se continúa con los siguientes.
+3. Al tocar una miniatura, la foto se importa (copia del original y vista previa) y entra en el pedido.
+4. Se edita y se pasa a Continuar. Desde la edición puede pulsar «Añadir más fotos» o «Guardar para después».
+
+**Validación de archivos** (en dos pasos):
+1. Extensión: se admiten JPEG/JPG/JPE/JFIF, PNG, WEBP, HEIC y HEIF; los vídeos y los demás formatos se rechazan con su motivo.
+2. Firma real del archivo: detecta archivos dañados y vídeos renombrados.
+
+El aviso emergente pide confirmación e incluye la opción «No avisar más en esta carga».
+
+### Kiosco: código compartido (`kiosk/shared/`)
+- `presets.js`: tamaños de copia, formatos de carnet, hojas y ajustes por defecto, y formato de moneda.
+- `layout.js`: recorte por defecto, zoom, orientación del marco, maquetación de la hoja (prueba la hoja en vertical y en horizontal y elige la que admite más fotos), reparto en hojas de los lotes y guías de corte.
+
+### Kiosco: interfaz (`kiosk/renderer/src/`)
+- **Pantallas** (`screens/`):
+  - `Home`: inicio con el icono ⚙️ protegido por PIN.
+  - `Sources`: siete fuentes de fotos y la bandeja de la sesión.
+  - `PrintOrder`: tamaño, copias, rellenar o encajar, marco, duplicar y encuadre.
+  - `IdPhoto`: formatos, editor con guías de cara, lotes y vista previa de la hoja.
+  - `Checkout` y `Done`: resumen, datos del cliente y elección entre imprimir o laboratorio.
+  - `Admin`: seis pestañas de ajustes.
+- **Componentes** (`components/`):
+  - `CropEditor`: arrastrar, pellizcar, rueda del ratón y deslizador.
+  - `Framed`: vista previa del marco con la máscara.
+  - `Picker`: selector de fotos y explorador de carpetas.
+  - `ui`: iconos, contador, ventana modal, indicador de espera y teclado en pantalla (`TouchField`).
+- **Estilos:** `styles.css` con la tipografía Plus Jakarta Sans incluida (`@fontsource-variable`).
+
+### Servidor (`server/`)
+- **`server.js`:**
+  - **Configuración** en `data/config.json`. La primera vez genera la contraseña de administración y la clave del kiosco, y las guarda en `data/CREDENCIALES-INICIALES.txt`.
+  - **Base de datos** `data/db.json`, con escritura atómica.
+  - **Pedidos:** `POST /api/orders` con clave de kiosco. Estados nuevo / en proceso / listo / entregado, miniaturas, descarga en ZIP y borrado. Copia opcional a una **carpeta caliente** agrupada por tamaño, para el minilab.
+  - **Galerías:**
+    - Se crean con un código de 6 caracteres y la contraseña cifrada con bcrypt.
+    - Al subir las fotos se generan la miniatura y la vista previa.
+    - El cliente puede marcar favoritas y descargar en ZIP si la galería lo permite.
+    - El original solo se entrega si la descarga está permitida o lo pide un kiosco con su clave.
+  - **Seguridad:** sesiones con token que caducan, límite de 8 intentos fallidos de acceso (bloqueo de 15 min) y comparación de claves en tiempo constante.
+  - **Comandos:** `npm run set-password -- NUEVA`. La variable `PIZARRO_DATA` cambia la carpeta de datos (se usa en las pruebas).
+- **`public/`:**
+  - `admin.html/js`: panel de pedidos, galerías y ajustes.
+  - `gallery.html/js`: acceso del cliente, visor y favoritas.
+  - `style.css`: estilos, con modo oscuro.
+
+### Configuración del espacio de trabajo
+- `CLAUDE.md`: instrucciones de trabajo (leer y actualizar este archivo).
+- `.claude/settings.json`: hooks SessionStart y SessionEnd, que ejecutan `.claude/hooks/session-start.ps1` y `session-end.ps1`. Los scripts deben guardarse en UTF-8 con BOM para que PowerShell 5.1 lea bien los acentos.
+- `README.md`: guía de puesta en marcha para el usuario.
+
+---
+
+## 3. Decisiones tomadas
+- Kiosco **a pantalla completa y táctil** con teclado en pantalla propio. El modo kiosco bloqueado se activa en los ajustes.
+- **Servidor local** en la tienda: sin coste mensual, y las galerías solo se ven dentro de la red de la tienda.
+- Recortes en **coordenadas normalizadas (0..1)**. La interfaz muestra una vista previa de 1600 px y el render final usa el original a 300 ppp.
+- Los archivos para la impresora se entregan **siempre en vertical**: las fotos y hojas horizontales se giran 90°.
+- **Fotos carnet:**
+  - Formatos: DNI 26x32, UE 35x45, Reino Unido, EEUU 2x2", Canadá 50x70, México, China 33x48, India y medida personalizada.
+  - Las marcas de corte van en el margen exterior.
+  - **Precio por hoja.**
+  - Por defecto, cada persona llena una hoja completa.
+- **Máscaras:** archivos PNG con transparencia que se estiran al tamaño de la copia y se giran 90° si no coinciden con la orientación de la foto. Hay una «máscara de evento activo» que se aplica a todas las copias.
+- **Privacidad:** al terminar, cancelar o pasar el tiempo de inactividad (180 s + 20 s de aviso), se borran las fotos del cliente. Al arrancar se limpian las sesiones que hayan quedado de un cierre inesperado.
+- La contraseña del correo IMAP se guarda **sin cifrar** en los ajustes del kiosco. Se recomienda un buzón exclusivo para el kiosco.
+- **Diseño (17/11/2026):** claro y moderno.
+  - Degradado violeta → rosa (`#6d4aff → #a64dff → #ff5c9d`) y paneles translúcidos con desenfoque de fondo.
+  - Botones en forma de píldora, sin bordes duros, y sombras suaves de color.
+  - Tipografía Plus Jakarta Sans y animaciones suaves.
+- **Acceso del personal:** icono ⚙️ visible en el inicio, protegido por PIN (por defecto `1234`, se cambia en Administración → General).
+- **Ampliar con márgenes:** la foto entera se encaja en el tamaño pedido y lo que falta se rellena con el color elegido (blanco por defecto, cinco colores más o uno libre). El filtro no se aplica a los márgenes.
+- **Perfil de color:** todas las salidas se convierten a sRGB y llevan el perfil sRGB incrustado.
+- **Tarifas por tramos:** el precio unitario depende de la cantidad **total** de ese tamaño en el pedido.
+- **Lotes de carnet:** cada persona puede ir «por hojas» (precio de hoja) o con un lote (n.º de fotos fijo y precio cerrado).
+- **Pedidos retenidos:** se guardan con el código `R-XXXXXX` y se continúan desde «Continuar un pedido guardado» en el inicio. Al completarse, el pedido retenido se borra.
+- **Repetir o reprocesar:** las repeticiones crean un pedido nuevo (`repeatOf`) a partir de los originales guardados. Reprocesar abre el pedido en la zona de selección con todos sus ajustes (`reprocessOf`).
+- **Carpeta del servidor:** `server/data/compartida`, configurable en el panel web. Solo los kioscos acceden, con su clave (cabecera o `?k=`), y no se permiten rutas fuera de la carpeta.
+- **La configuración del servidor admite BOM**, por si se edita `config.json` con el Bloc de notas.
+- **Identidad Pizarro (tercera tanda):**
+  - Paleta: Azul Profundo #0F2740 (principal), Arena #C9B29A, Crema #F6F2EA (fondo), Oliva #6B7055, Topo #8D7B6B y Grafito #333333.
+  - Tipografía Montserrat (incluida en el proyecto).
+  - Logo vectorial (`Logo` en `ui.jsx`): esquinas de encuadre y PIZARRO, **sin «FOTOGRAF»**, más una versión icono con la P.
+  - Diseño minimalista: sin degradados ni cristal, líneas finas y radios de 12–22 px.
+  - Inicio con panel azul de marca a la izquierda y opciones a la derecha.
+- **Selección de fotos:**
+  - Tocar una miniatura solo la muestra; ya no se añade sola al pedido.
+  - **Pulsación larga** (450 ms, como en Android) activa la multiselección. Allí se elige tamaño (o «Mantener sus tamaños») y copias, y se aplica a todas las marcadas. El botón «Seleccionar todas» las marca todas.
+- **Copias por tamaño:** cada tamaño de la cuadrícula lleva su contador; al tocar un tamaño se pide 1 copia.
+- **Más tamaños:**
+  - La lista rápida se configura en `quickSizes` (columna «Lista rápida» en Tamaños). El resto aparece en el desplegable «Más tamaños».
+  - Al elegir uno, ocupa el hueco de un tamaño sin copias de esa foto; si todos tienen copias, se añade al final.
+  - `otherSizeMode` decide si el cambio es **puntual** (solo ese cliente) o **siempre** (queda en la lista rápida).
+- **Modelo de pedido en la interfaz:**
+  - `items` = {foto, tamaño, copias}.
+  - `edits[foto]` = {filtro, color, giro, marco, modo, fondo, recortes por tamaño, orientación por tamaño}.
+  - `printSpec` los combina en el mismo formato de siempre, así que el proceso principal y `pedido.json` no cambian; solo se añade `angle`.
+- **Enderezar:**
+  - Dos dedos giran y hacen zoom; también hay un deslizador de ±45° y un botón «Quitar giro».
+  - En «Recortar y llenar», `clampCropRot` reduce y desplaza el recorte para que el marco girado **nunca salga de la foto**: si la caja envolvente del rectángulo girado cabe en la imagen, cabe el rectángulo.
+  - En «Ampliar con márgenes», la foto girada entera cabe en el marco y los márgenes son del color elegido.
+  - Render: sharp gira la imagen completa y luego recorta (`rotatedCenter`).
+- **Formatos nuevos:**
+  - **AVIF** y **GIF** (se imprime el primer fotograma), leídos con sharp.
+  - **PDF**: cada página es una foto, convertida a 300 ppp con **pdf.js + @napi-rs/canvas** (`main/pdf.js`). `@napi-rs` se desempaqueta del asar en el instalador.
+  - Las firmas reales se comprueban: `GIF8`, `%PDF-` y la marca `avif`.
+- **Pantalla de referencia: 22" a 1920x1080.**
+- **Acceso del personal discreto:** el engranaje del inicio es pequeño (22 px), sin fondo y al 40 % de opacidad (`.staff-btn`).
+- **Parte que no se imprime en transparencia:**
+  - En «Recortar y llenar», la foto completa se dibuja al 30 % de opacidad alrededor del marco (`.crop-ghost`) y el marco lleva un filo crema. Así se ve lo que la proporción del tamaño deja fuera.
+  - La foto también se puede arrastrar desde la zona transparente.
+  - Se deja un margen alrededor del marco para que esa zona se vea.
+- **Zona de selección compacta (cuarta tanda):** sin pestañas; tamaño, copias, calidad, encuadre, filtro (rejilla de 6×2), color (deslizadores 2×2) y marco, todo a la vista sin desplazamiento a 1920x1080. Barra superior reducida, imagen más grande.
+- **Elegir un tamaño no añade copia:** solo lo muestra en el encuadre. La copia se añade con «Añadir … al pedido» (o con «+»).
+- **Miniaturas:** pequeñas (64 px), medianas (92 px) o grandes (150 px), o ocultas. Se recuerda en el kiosco (`localStorage`). Al ocultarlas, la barra inferior queda en una línea y la imagen crece.
+- **TIFF y RAW de cámara:**
+  - TIFF se lee directamente.
+  - RAW (DNG, CR2, CR3, CRW, NEF, NRW, ARW, SRF, SR2, ORF, RW2, RAF, PEF, SRW, 3FR, ERF, KDC, MRW, MEF, IIQ, RWL, X3F): se usa la **mayor imagen JPEG incrustada** (la vista previa a tamaño completo de la cámara) y se aplica la orientación del RAW. No es un revelado: el color es el que decidió la cámara.
+  - Si el RAW no trae una vista previa de al menos 640x480, se avisa con ese motivo.
+  - El servidor genera también las miniaturas de los RAW de su carpeta compartida.
+
+---
+
+## 4. Estado actual
+### Hecho
+- [x] Estructura del proyecto (kiosco y servidor) e instalación de dependencias. Los scripts de instalación de electron, sharp y esbuild quedaron aprobados en el `allowScripts` de npm 11.
+- [x] Las siete fuentes de fotos (USB/SD, WiFi QR, cable, Bluetooth, correo, carpeta de red y galería).
+- [x] Pedido de copias: tamaño, copias, rellenar o encajar, marco, duplicar y encuadre táctil.
+- [x] Impresión en varias impresoras por tamaño, impresión de prueba y opción «papel del driver».
+- [x] Envío al laboratorio (HTTP o carpeta) y carpeta caliente en el servidor.
+- [x] Fotos carnet: ocho formatos y uno personalizado, guías de cara, lotes, «cada persona en su propia hoja», hojas de 10x15, 13x18 y A4, guías de corte (sin guías, marcas o líneas) y separación ajustable.
+- [x] Máscaras de ejemplo («Marco blanco» y «Evento - Nuestro gran día») y gestión de máscaras en Administración.
+- [x] Galerías con contraseña (servidor, web del cliente e importación desde el kiosco).
+- [x] Administración del kiosco en seis pestañas: General, Tamaños e impresoras, Fotos carnet, Fuentes, Laboratorio y galerías, y Máscaras.
+- [x] Pruebas automáticas de principio a fin (todas superadas):
+  - Importación, orientación EXIF y duplicados.
+  - Copias de 10x15 a 1205x1795 px y 300 ppp.
+  - Hoja UE con 8 fotos en 10x15.
+  - Hoja EEUU con líneas de corte.
+  - Envío al laboratorio por HTTP.
+  - Rechazo de una clave de kiosco incorrecta.
+  - Galería: contraseña incorrecta rechazada, original bloqueado para el cliente e importación desde el kiosco.
+  - Borrado de la sesión al terminar.
+- [x] Recorrido de la interfaz con capturas. Corregido: el botón «Listo» quedaba cortado en la ventana de encuadre y el editor de carnet se salía en pantallas bajas; ahora ambos se ajustan a la altura.
+- [x] Rediseño moderno e icono de ajustes ⚙️ con PIN.
+- [x] Sistema de seguimiento: PROYECTO.md, CLAUDE.md y los hooks de inicio y cierre (probados).
+- [x] **Segunda tanda (todas las pruebas superadas):**
+  - **Formatos:** vídeo, PDF, falso JPG y vídeo renombrado rechazados con su motivo.
+  - **Calidad:** 300x200 px a 10x15 son 33 ppp, «insuficiente»; para 3000x2000 px se recomienda A4.
+  - **Márgenes de color:** la esquina sale roja y la foto queda dentro.
+  - **Filtro y color:** el B/N sale gris en el render y el brillo +60 aclara.
+  - **Perfil sRGB** incrustado y 300 ppp.
+  - **Tramos de precio:** 60 copias 10x15 = 15 €.
+  - **Tarifas en CSV:** exportación e importación (actualiza y añade).
+  - **Lote de carnet:** 6 € + una hoja de 8 € = 14 €.
+  - **Pedidos guardados:**
+    - `pedido.json` conserva filtro, márgenes y color.
+    - Retener → continuar → al completarlo desaparece de «Sin terminar».
+    - Repetición parcial.
+    - Pedido con error → reintento → «Enviado».
+    - Los de más de 30 días se borran.
+  - **Carpeta del servidor:** lista (también el vídeo, para poder avisar), miniaturas y descarga. Sin clave no hay acceso y no se puede salir de la carpeta.
+  - **Recorrido con capturas:** aviso emergente, zona de selección, filtros, color, márgenes, calidad baja, guardar para después, pedidos, detalle y tarifas.
+- [x] **Tercera tanda (todas las pruebas superadas):**
+  - **Formatos:** PDF, GIF y AVIF admitidos por extensión y por firma; un PDF falso se rechaza.
+  - **PDF:** uno de 2 páginas da 2 fotos; la página horizontal sale a 1751x1238 a 300 ppp.
+  - **Enderezar:** en 2000 recortes y giros aleatorios, ninguna esquina sale de la foto.
+  - **Render con giro** de 12°, −30° y 45°: sin blanco en las esquinas; un recorte forzado fuera del borde se corrige solo.
+  - **Márgenes con giro:** color arena exacto y la foto dentro.
+  - **GIF, AVIF y página de PDF:** copia 10x15 a 300 ppp.
+  - **Recorrido táctil simulado:**
+    - Tocar solo muestra la foto.
+    - Tocar un tamaño pide 1 copia, y «+» la sube a 2.
+    - Desde «Más tamaños», 30x40 sustituye a A4 (que no tenía copias).
+    - La pulsación larga activa la selección; «Seleccionar todas» con 10x15 ×2 se aplica a 5 fotos (total 12,50 €).
+    - El inicio se ve con la identidad Pizarro.
+
+### Pendiente
+- [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP o Mitsubishi) y ajustar los precios reales.
+- [ ] Probar **móvil por cable** (Android e iPhone), **Bluetooth** y **correo IMAP** con dispositivos y buzón reales.
+- [ ] Revisar el diseño del **panel de administración del servidor** web (`server/public`) para igualarlo al nuevo estilo del kiosco.
+- [ ] Generar el **instalador** (`npm run dist`) y probarlo en el PC del kiosco. Valorar que la app arranque sola con Windows.
+- [ ] Hacer que el servidor arranque como servicio de Windows (por ejemplo con NSSM o el Programador de tareas).
+- [ ] Opcional: publicar las galerías para verlas desde casa (abrir puertos, usar un túnel o pasar a la nube).
+
+---
+
+## 5. Próximos pasos
+0. Valorar, para orígenes con miles de fotos, una vista de cuadrícula a pantalla completa además de la tira inferior.
+1. Configurar las impresoras reales en Administración → Tamaños e impresoras y hacer impresiones de prueba.
+2. Prueba en la tienda con móviles reales (WiFi QR, cable y Bluetooth) y con el correo.
+3. Igualar el estilo del panel web del servidor.
+4. Generar el instalador y dejar kiosco y servidor arrancando solos.
+
+---
+
+## 6. Cómo arrancar
+Primero el servidor:
+
+```bash
+cd server && npm install && npm start
+```
+
+Después, en otra ventana, el kiosco:
+
+```bash
+cd kiosk && npm install && npm start
+```
+
+- Al arrancar por primera vez, el servidor crea `server/data/CREDENCIALES-INICIALES.txt` con la contraseña de administración y la clave del kiosco.
+- En el kiosco: ⚙️ → PIN → Laboratorio y galerías. Ahí se ponen la dirección del servidor (`http://IP:4000`) y la clave del kiosco.
+- Puertos: 8787 (subida por WiFi) y 4000 (servidor). Windows pedirá permiso en el firewall: acepta «Redes privadas».
+- Pruebas: los scripts `e2e.mjs` y `ui.mjs` se ejecutan con `kiosk/node_modules/electron/dist/electron.exe <script>` y una carpeta de datos aislada. Se crearon en la carpeta temporal de la sesión; si se necesitan, se pueden volver a crear en `kiosk/tests/`.
+
+---
+
+## 7. Registro de sesiones
+### 17/11/2026 · Sesión inicial
+- **Requisitos acordados:** pantalla táctil, servidor local y las siete fuentes de fotos (se añaden correo y carpeta de red a petición del cliente). La primera fase es la base completa.
+- **Kiosco:** proceso principal completo, interfaz React y panel de administración.
+- **Servidor:** pedidos, galerías y paneles web.
+- **Pruebas:**
+  - Pruebas de principio a fin superadas.
+  - Capturas de todas las pantallas.
+  - Corregido el ajuste de altura de los editores de encuadre.
+  - Corregidos dos fallos detectados al revisar el código: la ruta de unidades como `E:\` no se permitía y las marcas de corte se solapaban con las fotos.
+- **Cambios pedidos por el cliente:**
+  - Diseño más moderno y menos industrial (rediseño completo).
+  - Icono de ajustes protegido por contraseña.
+  - Archivo de proyecto de lectura obligatoria con guardado automático al cerrar.
+- Se actualiza este archivo con todo lo realizado.
+- **Segunda tanda, pedida por el cliente:**
+  - Carpeta compartida del servidor y validación de formatos con aviso.
+  - Ampliar con márgenes de color y nueva zona de selección con filtros, color y aviso de calidad.
+  - Añadir más fotos, retener, repetir y reprocesar pedidos (guardados 30 días).
+  - Perfil sRGB, tarifas con importar y exportar, pedidos por estado y tipos de lotes.
+  - Se eliminan `PrintOrder.jsx` y `Picker.jsx`, que quedan sustituidos por `Studio.jsx` y por la carga por origen.
+  - Nota: en el puerto 4000 de este equipo hay un servidor de la tienda en marcha (el real, con `server/data`). Las pruebas se hicieron en el puerto 4100 con datos aislados y sin tocarlo. Se reinició el mismo día con la versión nueva (proceso independiente en una ventana minimizada; la carpeta compartida `server/data/compartida` se creó y responde).
+
+### 17/11/2026 · Tercera tanda
+- **Pedidos por el cliente:**
+  - La selección ya no marca sola: toque = ver, y pulsación larga = multiselección; botón «Seleccionar todas» con tamaño y/o copias.
+  - Enderezar con dos dedos sin que la foto salga del encuadre (salvo con márgenes).
+  - «Más tamaños» en un desplegable, con sustitución puntual o permanente.
+  - Al dar copias a un tamaño, queda pedido.
+  - PDF, GIF y AVIF imprimibles.
+  - Identidad Pizarro (logo sin «FOTOGRAF», paleta y Montserrat) con diseño minimalista.
+- **Cuarta tanda:**
+  - Panel de opciones compacto, todo a la vista en 1920x1080, e imagen más grande.
+  - Miniaturas ocultables y con tres tamaños.
+  - Al elegir un tamaño ya no se añade una copia.
+  - TIFF y RAW de cámara.
+  - Pruebas: TIFF; DNG, NEF, CR3 y RAF simulados (con miniatura y vista previa, eligen la grande, 3000x2000); RAW sin vista previa avisa con su motivo; panel sin desplazamiento (871 ≤ 871 px); ocultar miniaturas amplía la imagen.
+- **Pendiente de decidir con el cliente:** BMP y JPEG XL, revelado RAW real y el resto de mejoras propuestas.
+
+### 17/11/2026 14:54 – 15:54 · Sesión cerrada (guardado automático, 60 min)
+- Archivos modificados:
+  - `iMGENES MENUS MUESTRA/Sin título-1.psb`
+  - `kiosk/main/gallery.js`
+  - `kiosk/main/images.js`
+  - `kiosk/main/main.js`
+  - `kiosk/main/orders.js`
+  - `kiosk/main/preload.cjs`
+  - `kiosk/main/render.js`
+  - `kiosk/main/session.js`
+  - `kiosk/main/sources/bluetooth.js`
+  - `kiosk/main/sources/email.js`
+  - `kiosk/main/sources/srvshare.js`
+  - `kiosk/main/sources/upload-server.js`
+  - `kiosk/main/store.js`
+  - `kiosk/main/tariffs.js`
+  - `kiosk/renderer/src/api.js`
+  - `kiosk/renderer/src/App.jsx`
+  - `kiosk/renderer/src/components/ColorTools.jsx`
+  - `kiosk/renderer/src/components/CropEditor.jsx`
+  - `kiosk/renderer/src/components/Filmstrip.jsx`
+  - `kiosk/renderer/src/components/ui.jsx`
+  - `kiosk/renderer/src/screens/Admin.jsx`
+  - `kiosk/renderer/src/screens/AdminOrders.jsx`
+  - `kiosk/renderer/src/screens/Checkout.jsx`
+  - `kiosk/renderer/src/screens/Home.jsx`
+  - `kiosk/renderer/src/screens/IdPhoto.jsx`
+  - `kiosk/renderer/src/screens/Sources.jsx`
+  - `kiosk/renderer/src/screens/Studio.jsx`
+  - `kiosk/renderer/src/styles.css`
+  - `kiosk/shared/color.js`
+  - `kiosk/shared/presets.js`
+  - `kiosk/shared/quality.js`
+  - `README.md`
+  - `server/package.json`
+  - `server/package-lock.json`
+  - `server/public/admin.html`
+  - `server/public/admin.js`
+  - `server/server.js`

@@ -1,0 +1,22 @@
+# Dependencias y compilados (se regeneran con npm install / npm run build)
+node_modules/
+kiosk/dist-renderer/
+kiosk/dist/
+
+# DATOS PRIVADOS DEL SERVIDOR: contraseñas, clave del kiosco, pedidos y fotos de clientes
+server/data/
+
+# Configuración local de Claude Code (contiene rutas de este equipo)
+.claude/
+
+# Archivos de trabajo de diseño (no se publican)
+iMGENES MENUS MUESTRA/
+*.psb
+*.psd
+
+# Varios
+*.log
+npm-debug.log*
+Thumbs.db
+desktop.ini
+.DS_Store

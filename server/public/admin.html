@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Administración del servidor</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div id="login" class="login card col">
+    <div class="row"><div class="logo">P</div><h2 style="margin:0">Administración</h2></div>
+    <input id="pwd" type="password" placeholder="Contraseña" autocomplete="current-password">
+    <div id="lerr" class="err"></div>
+    <button class="btn primary" id="go">Entrar</button>
+  </div>
+
+  <div id="app" hidden>
+    <header class="bar"><div class="logo">P</div><h1>Servidor de la tienda</h1><button class="btn" id="out">Salir</button></header>
+    <main>
+      <div class="tabs">
+        <button data-tab="orders" class="on">Pedidos</button>
+        <button data-tab="galleries">Galerías</button>
+        <button data-tab="settings">Ajustes</button>
+      </div>
+
+      <section id="tab-orders">
+        <div class="row" style="margin-bottom:12px">
+          <select id="ofilter"><option value="">Todos los estados</option><option>nuevo</option><option>en proceso</option><option>listo</option><option>entregado</option></select>
+          <input id="osearch" placeholder="Buscar por nº o cliente">
+          <span class="muted small">Se actualiza solo cada 15 s</span>
+        </div>
+        <table><thead><tr><th>Pedido</th><th>Cliente</th><th>Contenido</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody id="orders"></tbody></table>
+      </section>
+
+      <section id="tab-galleries" hidden>
+        <div class="card col" style="margin-bottom:18px">
+          <h3 style="margin:0">Nueva galería</h3>
+          <div class="row">
+            <input id="gtitle" placeholder="Título (p. ej. Boda Ana y Luis)" style="flex:2">
+            <input id="gclient" placeholder="Cliente" style="flex:1">
+            <input id="gpass" placeholder="Contraseña (vacío = automática)" style="flex:1">
+            <label class="row small"><input type="checkbox" id="gdl"> Permitir descarga</label>
+            <button class="btn primary" id="gcreate">Crear</button>
+          </div>
+          <div id="gcreated"></div>
+        </div>
+        <div id="gdetail" hidden></div>
+        <table id="gtable"><thead><tr><th>Galería</th><th>Código</th><th>Cliente</th><th>Fotos</th><th>Favoritas</th><th></th></tr></thead><tbody id="galleries"></tbody></table>
+      </section>
+
+      <section id="tab-settings" hidden>
+        <div class="card col" style="max-width:720px">
+          <label>Nombre de la tienda <input id="sname" style="width:100%"></label>
+          <label>Carpeta caliente del laboratorio (opcional)
+            <input id="shot" placeholder="D:\Minilab\Entrada" style="width:100%">
+          </label>
+          <p class="muted small" style="margin:0">Si la indicas, cada pedido se copia ahí agrupado por tamaño, para el software del minilab o la impresora del laboratorio.</p>
+          <label>Carpeta compartida para los kioscos
+            <input id="sshare" placeholder="D:\Fotos compartidas" style="width:100%">
+          </label>
+          <p class="muted small" style="margin:0">Todo lo que haya en esta carpeta (y sus subcarpetas) se ve desde los kioscos sin contraseña, en «Carpeta del servidor». Puedes compartirla en la red de Windows para que el personal deje fotos desde otros equipos.</p>
+          <label>Clave del kiosco <input id="skey" readonly style="width:100%" class="code"></label>
+          <p class="muted small" style="margin:0">Cópiala en el kiosco: Administración → Laboratorio y galerías → Clave del kiosco.</p>
+          <div class="row"><button class="btn primary" id="ssave">Guardar</button><button class="btn" id="sregen">Generar nueva clave</button><span id="smsg" class="muted small"></span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="/static/admin.js"></script>
+</body>
+</html>

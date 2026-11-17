@@ -1,0 +1,22 @@
+{
+  "name": "pizarro-servidor",
+  "version": "0.1.0",
+  "description": "Servidor de la tienda: pedidos de laboratorio y galerías privadas",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "set-password": "node server.js --set-password"
+  },
+  "dependencies": {
+    "archiver": "^7.0.1",
+    "bcryptjs": "^3.0.2",
+    "express": "^4.21.2",
+    "heic-convert": "^2.1.0",
+    "multer": "^2.0.2",
+    "sharp": "^0.34.2"
+  },
+  "allowScripts": {
+    "sharp@0.34.5": true
+  }
+}

@@ -19,7 +19,7 @@ import { listPrinters, testPrint } from './print.js';
 import { submitOrder, quote, printableSizes, holdOrder, repeatOrder, retryOrder } from './orders.js';
 import { listOrders, getOrder, deleteOrder, findHeld, storedPhotos, purgeOrders, STATUS_LABEL } from './store.js';
 import { exportTariffs, importTariffs } from './tariffs.js';
-import { testLab } from './lab.js';
+import { testLab, serverFolders, retryPending, startRetryLoop } from './lab.js';
 import { galleryLogin, galleryDownload } from './gallery.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -90,6 +90,8 @@ function registerIpc() {
   handle('admin:quit', (pin) => { checkPin(pin); setTimeout(() => app.quit(), 100); return true; });
   handle('admin:testEmail', (pin, cfg) => { checkPin(pin); return testEmail(cfg.pass === '••••••' ? { ...cfg, pass: getSettings().email.pass } : cfg); });
   handle('admin:testLab', (pin) => { checkPin(pin); return testLab(); });
+  handle('admin:serverFolders', (pin) => { checkPin(pin); return serverFolders(); });
+  handle('admin:retryPending', async (pin) => { checkPin(pin); return retryPending(); });
   handle('admin:pickFolder', async (pin) => {
     checkPin(pin);
     const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'] });
@@ -312,6 +314,7 @@ app.whenReady().then(async () => {
   purgeOrders().catch(() => {});
   setInterval(() => purgeOrders().catch(() => {}), 6 * 3600_000);
   startUploadServer();
+  startRetryLoop((msg) => console.log(msg));
   createWindow();
 });
 

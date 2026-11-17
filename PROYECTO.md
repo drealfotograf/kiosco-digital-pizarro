@@ -197,6 +197,35 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
   - RAW (DNG, CR2, CR3, CRW, NEF, NRW, ARW, SRF, SR2, ORF, RW2, RAF, PEF, SRW, 3FR, ERF, KDC, MRW, MEF, IIQ, RWL, X3F): se usa la **mayor imagen JPEG incrustada** (la vista previa a tamaño completo de la cámara) y se aplica la orientación del RAW. No es un revelado: el color es el que decidió la cámara.
   - Si el RAW no trae una vista previa de al menos 640x480, se avisa con ese motivo.
   - El servidor genera también las miniaturas de los RAW de su carpeta compartida.
+- **Quinta tanda (17/11/2026):**
+  - **Inicio:** el logotipo va centrado en vertical. Debajo hay una línea breve sobre privacidad y el enlace «Protección de datos (RGPD) y aviso legal», que abre una ventana con dos pestañas (primera capa del RGPD, art. 11 LOPDGDD). Los datos del titular (razón social, NIF, dirección, correo, teléfono, DPD, registro mercantil) se rellenan en Administración → General. Mientras falten, se ven entre corchetes.
+  - **Zona de selección v3:**
+    - La foto va al centro y las miniaturas a la derecha, en una cuadrícula de 1 a 4 columnas. El deslizador de arriba tiene un icono de foto pequeña a la izquierda y de foto grande a la derecha.
+    - Todas las opciones pasan a la barra inferior: tamaño, encuadre, filtro, color, texto y escritura, y «Más».
+    - **Código de colores por tamaño:** cada tamaño tiene un color (editable en Tamaños e impresoras). Las miniaturas llevan un punto de color con el número de copias de cada tamaño, y la leyenda del pie explica los colores.
+  - **Importar:** «Solo esta carpeta» o «Todo (con subcarpetas)», en carpetas locales y en la del servidor. Salir a buscar más fotos no cierra el pedido: las nuevas se añaden.
+  - **Polaroid** dentro de 10x15 (papel 102x152 mm, con línea de corte discontinua):
+    - **8,5x8,5:** imagen de 85x85 mm con 8,5 mm de margen arriba y a los lados y 2 cm abajo. La tarjeta mide 102x113,5 mm. **Corregido a petición del cliente; antes era de 10x10.**
+    - **8x10:** imagen de 80x100 mm y 2 cm de margen inferior.
+    - Admiten texto (5 letras de Windows, 8 colores y tamaño) y escritura a mano con el dedo, que se imprimen igual que se ven.
+  - **Ajustar con fondo:** la foto se escala y se mueve libremente (pinza y arrastre) dentro del formato. El hueco se rellena de blanco, negro u otro color. «Restaurar» devuelve la foto a su estado original.
+  - **Borde blanco:** es un margen proporcional en los cuatro lados (5 mm por defecto, de 1 a 20 mm), independiente del encuadre.
+  - **Copia virtual:** es una entrada nueva con el mismo original y ajustes independientes (encuadre, color, tamaños, texto). Se marca «CV» y se conserva al guardar o reprocesar el pedido (campo `vc`).
+  - **Impresión y envío** (Administración, pestaña nueva):
+    - Se puede imprimir en el kiosco, enviar al servidor o las dos cosas.
+    - **Carpeta de destino:** se elige entre las subcarpetas de la «carpeta raíz de exportación» del servidor, o se escribe una nueva.
+    - **Si el servidor no responde,** la copia se guarda en la ruta local alternativa con un `pendiente.json` y se reintenta sola cada N minutos. También hay un botón «Reintentar pendientes ahora».
+    - **Confirmación:** el servidor tiene que confirmar el número de archivos guardados. La pantalla final dice si la copia está confirmada en el servidor o guardada en la ruta local.
+    - **Nombres:** `AAAA_MM_DD_Nº/<tamaño>/AAAA_MM_DD_Nº_<foto>.jpeg`, con `_(n)` si hay varias copias y `-2` si se repite el nombre. Siempre en JPEG sRGB.
+  - **Resumen:** antes de imprimir o enviar se pregunta «¿Confirmas la impresión?», y después se da el número de pedido.
+  - **Lotes de carnet (pantalla nueva):**
+    - Sin nombres de países. Medida española de 35x45 en papel horizontal, con separaciones iguales entre fotos y márgenes.
+    - **Lote 1:** 8 fotos iguales. **Lote 2:** 4 fotos de 35x45 y una de 7x10, que tiene su propio encuadre.
+    - Vista previa en vivo. Guías de corte y/o marco de foto, y guías de cara.
+    - Copias por lote. «Añadir otro lote» memoriza el actual con su miniatura y permite elegir otro sin salir. Al continuar se pasa al resumen con su confirmación.
+    - En Administración → Lotes de carnet se activa o desactiva cada lote (hay otros dos de serie, desactivados), se cambian nombre y precio, y se ven las vistas previas. También se decide qué opciones puede tocar el cliente.
+    - Los pedidos antiguos de carnet por formato se siguen abriendo en la pantalla anterior.
+  - **Migración de ajustes (schema 4):** las instalaciones existentes reciben las Polaroid y los lotes nuevos, y la Polaroid 10x10 antigua pasa a 8,5x8,5.
 
 ---
 
@@ -254,7 +283,31 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
     - La pulsación larga activa la selección; «Seleccionar todas» con 10x15 ×2 se aplica a 5 fotos (total 12,50 €).
     - El inicio se ve con la identidad Pizarro.
 
+- [x] **Quinta tanda (todas las pruebas superadas):**
+  - **Render:**
+    - Polaroid 8,5x8,5: papel 1205x1795, márgenes, texto a mano impreso en el margen y línea de corte a 113,5 mm.
+    - Polaroid 8x10.
+    - Borde de 5 mm.
+    - «Ajustar» con fondo negro, reducida y desplazada.
+    - Lote de 8 (8 fotos con separación blanca) y lote 4+7x10.
+  - **Envío:**
+    - Con el servidor apagado, copia local con `pendiente.json`.
+    - Al encender el servidor (puerto 4100, datos aislados), el reintento envía y borra la copia local.
+    - Estructura `Laboratorio/2026_11_17_0042/10 x 15 cm/…_(3).jpeg`.
+    - Lista de carpetas del servidor y carpeta de destino nueva creada al enviar.
+  - **Interfaz a 1920x1080 (capturas):**
+    - Sin desplazamiento en la selección ni en los lotes.
+    - Miniaturas de 1 a 4 columnas.
+    - Polaroid con papel y escritura.
+    - Fondo negro, borde, copia virtual, selección múltiple, colores y leyenda.
+    - El pedido se conserva al volver de «Añadir más fotos».
+    - Carnet sin países, con dos lotes memorizados.
+    - Administración: envío y lotes.
+    - Migración desde ajustes antiguos.
+
 ### Pendiente
+- [ ] **Datos legales del titular** en Administración → General (razón social, NIF, dirección, correo). Hasta entonces el aviso legal muestra marcadores entre corchetes.
+- [ ] **Reiniciar el servidor de la tienda** para que tenga los nuevos puntos de exportación (`/api/export/folders` y el guardado por carpetas) y fijar su «carpeta raíz de exportación».
 - [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP o Mitsubishi) y ajustar los precios reales.
 - [ ] Probar **móvil por cable** (Android e iPhone), **Bluetooth** y **correo IMAP** con dispositivos y buzón reales.
 - [ ] Revisar el diseño del **panel de administración del servidor** web (`server/public`) para igualarlo al nuevo estilo del kiosco.
@@ -265,6 +318,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 ---
 
 ## 5. Próximos pasos
+- **Seguridad y normativa (revisión del 17/11/2026):** ver el informe de la sesión. Lo urgente: rellenar los datos legales, cambiar el PIN 1234 y la contraseña del servidor, restringir el puerto 4000 a la red de la tienda en el firewall, y firmar el contrato de encargado del tratamiento si el laboratorio es de otra empresa.
 0. Valorar, para orígenes con miles de fotos, una vista de cuadrícula a pantalla completa además de la tira inferior.
 1. Configurar las impresoras reales en Administración → Tamaños e impresoras y hacer impresiones de prueba.
 2. Prueba en la tienda con móviles reales (WiFi QR, cable y Bluetooth) y con el correo.
@@ -272,6 +326,9 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 4. Generar el instalador y dejar kiosco y servidor arrancando solos.
 
 ---
+
+## Repositorio
+Público en **https://github.com/drealfotograf/kiosco-digital-pizarro** (sin licencia: todos los derechos reservados). Commits con el correo privado `noreply` de GitHub. Fuera del repositorio (`.gitignore`): `server/data/`, `node_modules/`, compilados, `.claude/` y archivos de Photoshop. Git y GitHub CLI están instalados en `C:\Program Files\Git` y `C:\Program Files\GitHub CLI`.
 
 ## 6. Cómo arrancar
 Primero el servidor:
@@ -371,3 +428,47 @@ cd kiosk && npm install && npm start
   - `server/public/admin.html`
   - `server/public/admin.js`
   - `server/server.js`
+
+### 17/11/2026 15:59 – 17:51 · Sesión cerrada (guardado automático, 112 min)
+- Archivos modificados:
+  - `.gitignore`
+  - `CLAUDE.md`
+  - `iMGENES MENUS MUESTRA/Sin título-1.psb`
+  - `kiosk/main/images.js`
+  - `kiosk/main/main.js`
+  - `kiosk/main/orders.js`
+  - `kiosk/main/pdf.js`
+  - `kiosk/main/render.js`
+  - `kiosk/main/session.js`
+  - `kiosk/main/sources/upload-server.js`
+  - `kiosk/package.json`
+  - `kiosk/package-lock.json`
+  - `kiosk/renderer/src/api.js`
+  - `kiosk/renderer/src/App.jsx`
+  - `kiosk/renderer/src/components/ColorTools.jsx`
+  - `kiosk/renderer/src/components/CropEditor.jsx`
+  - `kiosk/renderer/src/components/Filmstrip.jsx`
+  - `kiosk/renderer/src/components/ui.jsx`
+  - `kiosk/renderer/src/main.jsx`
+  - `kiosk/renderer/src/screens/Admin.jsx`
+  - `kiosk/renderer/src/screens/Home.jsx`
+  - `kiosk/renderer/src/screens/IdPhoto.jsx`
+  - `kiosk/renderer/src/screens/Sources.jsx`
+  - `kiosk/renderer/src/screens/Studio.jsx`
+  - `kiosk/renderer/src/styles.css`
+  - `kiosk/shared/layout.js`
+  - `kiosk/shared/presets.js`
+  - `server/server.js`
+
+### 17/11/2026 17:58 – 18:26 · Sesión cerrada (guardado automático, 28 min)
+- Sin cambios en archivos del proyecto.
+
+### 17/11/2026 · Quinta tanda
+- **Inicio:** enlace RGPD con aviso legal desplegable y logotipo centrado.
+- **Zona de selección:** miniaturas a la derecha (1–4 columnas con deslizador), opciones en la barra inferior, colores por tamaño y leyenda.
+- **Importar:** «Solo esta carpeta» o «Todo (con subcarpetas)».
+- **Nuevo en las copias:** Polaroid 8,5x8,5 (el cliente corrigió la medida, que era 10x10) y 8x10, con texto y escritura a mano. «Ajustar con fondo» con escala y posición libres, borde blanco proporcional, «Restaurar» y copia virtual.
+- **Impresión y envío:** imprimir y/o enviar al servidor, con carpeta de destino, ruta local de respaldo, reintento automático, confirmación y nombres AAAA_MM_DD_Nº.
+- **Carnet:** pantalla de lotes nueva (8 de 35x45, y 4 de 35x45 + 1 de 7x10) con vista previa, guías y marco, copias, «Añadir otro lote» y confirmación.
+- **Pruebas:** motor, envío con fallo y reintento, y recorrido de la interfaz a 1920x1080: todo correcto.
+- **Revisión de seguridad y normativa:** entregada al cliente.

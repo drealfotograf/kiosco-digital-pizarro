@@ -127,9 +127,9 @@ async function uploadPhotos(g) {
 // ---------- Ajustes ----------
 async function loadSettings() {
   const c = await api('/api/admin/config');
-  $('sname').value = c.storeName; $('shot').value = c.hotFolder; $('skey').value = c.kioskKey; $('sshare').value = c.shareFolder;
+  $('sname').value = c.storeName; $('shot').value = c.hotFolder; $('skey').value = c.kioskKey; $('sshare').value = c.shareFolder; $('sexport').value = c.exportRoot;
 }
-$('ssave').onclick = async () => { await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({ storeName: $('sname').value, hotFolder: $('shot').value, shareFolder: $('sshare').value }) }); $('smsg').textContent = 'Guardado'; };
+$('ssave').onclick = async () => { await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({ storeName: $('sname').value, hotFolder: $('shot').value, shareFolder: $('sshare').value, exportRoot: $('sexport').value }) }); $('smsg').textContent = 'Guardado'; };
 $('sregen').onclick = async () => {
   if (!confirm('Los kioscos dejarán de poder enviar pedidos hasta que les pongas la nueva clave. ¿Continuar?')) return;
   const r = await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({ regenerateKioskKey: true }) });

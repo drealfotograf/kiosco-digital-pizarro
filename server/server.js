@@ -191,6 +191,33 @@ app.get('/api/share/file', kioskOrQueryKey, (req, res, next) => {
 // ---------- Pedidos desde el kiosco ----------
 app.get('/api/ping', kioskOnly, (req, res) => res.json({ ok: true, store: config.storeName }));
 
+// ---------- Exportación de pedidos a carpetas de destino ----------
+const exportRoot = () => path.resolve(config.exportRoot || path.join(DATA, 'exportaciones'));
+const cleanSeg = (s) => String(s || '').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/^\.+/, '').trim().replace(/[. ]+$/, '');
+
+async function exportOrderFiles(dir, files, rels, dest) {
+  const root = exportRoot();
+  const destDir = path.join(root, cleanSeg(dest) || 'General');
+  let saved = 0;
+  for (const [i, rel] of rels.entries()) {
+    const segs = String(rel).split(/[\\/]+/).map(cleanSeg).filter(Boolean);
+    const target = path.join(destDir, ...segs);
+    if (!target.startsWith(destDir + path.sep)) continue; // nunca fuera de la carpeta de destino
+    await fsp.mkdir(path.dirname(target), { recursive: true });
+    await fsp.copyFile(path.join(dir, files[i]), target);
+    if (fs.existsSync(target)) saved++; // confirmación real de la copia
+  }
+  const first = String(rels[0]).split(/[\\/]+/).map(cleanSeg).filter(Boolean)[0] || '';
+  return { saved, where: path.join(destDir, first) };
+}
+
+app.get('/api/export/folders', kioskOnly, async (req, res) => {
+  const root = exportRoot();
+  await fsp.mkdir(root, { recursive: true });
+  const folders = (await fsp.readdir(root, { withFileTypes: true })).filter((e) => e.isDirectory() && !hidden(e.name)).map((e) => e.name).sort();
+  res.json({ root, folders });
+});
+
 app.post('/api/orders', kioskOnly, upload.array('files'), async (req, res) => {
   try {
     const m = JSON.parse(req.body.manifest || '{}');
@@ -199,14 +226,20 @@ app.post('/api/orders', kioskOnly, upload.array('files'), async (req, res) => {
     const dir = path.join(DATA, 'orders', id);
     await fsp.mkdir(dir, { recursive: true });
     const files = [];
-    for (const f of req.files || []) {
-      const name = safeName(f.originalname);
+    // Copia interna (para el panel): nombre único por posición, porque la misma foto puede ir en varios tamaños.
+    for (const [i, f] of (req.files || []).entries()) {
+      const name = `${String(i + 1).padStart(3, '0')}_${safeName(f.originalname)}`;
       await fsp.rename(f.path, path.join(dir, name)).catch(async () => { await fsp.copyFile(f.path, path.join(dir, name)); await fsp.rm(f.path, { force: true }); });
       files.push(name);
     }
-    const items = (m.items || []).filter((i) => files.includes(safeName(i.file))).map((i) => ({ file: safeName(i.file), size: String(i.size || ''), qty: Math.max(1, i.qty | 0), wMm: i.wMm, hMm: i.hMm, original: i.original ? String(i.original) : undefined }));
+    const items = (m.items || []).slice(0, files.length).map((it, i) => ({ file: files[i], size: String(it.size || ''), qty: Math.max(1, it.qty | 0), wMm: it.wMm, hMm: it.hMm, original: it.original ? String(it.original) : undefined }));
+    // Exportación con la estructura pedida por el kiosco: <carpeta destino>/AAAA_MM_DD_Nº/<tamaño>/AAAA_MM_DD_Nº_foto.jpeg
+    let exported = null;
+    let rels = [];
+    try { rels = JSON.parse(req.body.paths || '[]'); } catch { rels = []; }
+    if (rels.length === files.length && rels.length) exported = await exportOrderFiles(dir, files, rels, req.body.dest);
     const order = {
-      id, orderNo: String(m.orderNo || id), createdAt: new Date().toISOString(), kind: m.kind === 'id' ? 'id' : 'prints',
+      exportedTo: exported?.where, id, orderNo: String(m.orderNo || id), createdAt: new Date().toISOString(), kind: ['id', 'idlots'].includes(m.kind) ? 'id' : 'prints',
       customer: { name: String(m.customer?.name || '').slice(0, 80), phone: String(m.customer?.phone || '').slice(0, 20) },
       total: Number(m.total) || 0, currency: String(m.currency || '€'), items, status: 'nuevo', kiosk: req.ip
     };
@@ -215,7 +248,7 @@ app.post('/api/orders', kioskOnly, upload.array('files'), async (req, res) => {
     await saveDb();
     if (config.hotFolder) exportToHotFolder(order).catch((e) => console.error('Carpeta caliente:', e.message));
     console.log(`Pedido ${id} recibido: ${items.length} archivo(s), ${order.total} ${order.currency}`);
-    res.json({ ok: true, id });
+    res.json({ ok: true, id, exported });
   } catch (e) {
     await cleanupTmp(req.files);
     res.status(400).json({ error: e.message });
@@ -242,9 +275,10 @@ app.post('/api/admin/login', rateLimit, (req, res) => {
 });
 const admin = auth('admin');
 
-app.get('/api/admin/config', admin, (req, res) => res.json({ hotFolder: config.hotFolder, storeName: config.storeName, kioskKey: config.kioskKey, shareFolder: shareRoot() }));
+app.get('/api/admin/config', admin, (req, res) => res.json({ hotFolder: config.hotFolder, storeName: config.storeName, kioskKey: config.kioskKey, shareFolder: shareRoot(), exportRoot: exportRoot() }));
 app.put('/api/admin/config', admin, (req, res) => {
   if (typeof req.body.hotFolder === 'string') config.hotFolder = req.body.hotFolder.trim();
+  if (typeof req.body.exportRoot === 'string' && req.body.exportRoot.trim()) { config.exportRoot = req.body.exportRoot.trim(); fs.mkdirSync(exportRoot(), { recursive: true }); }
   if (typeof req.body.shareFolder === 'string' && req.body.shareFolder.trim()) {
     config.shareFolder = req.body.shareFolder.trim();
     fs.mkdirSync(shareRoot(), { recursive: true });

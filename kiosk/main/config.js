@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS } from '../shared/presets.js';
+import { DEFAULT_SETTINGS, DEFAULT_PRINT_SIZES, SETTINGS_SCHEMA } from '../shared/presets.js';
 
 let settings = null;
 const file = () => path.join(app.getPath('userData'), 'settings.json');
@@ -21,6 +21,21 @@ export function getSettings() {
     let saved = {};
     try { saved = JSON.parse(fs.readFileSync(file(), 'utf8')); } catch { /* primera ejecución */ }
     settings = merge(DEFAULT_SETTINGS, saved);
+    // Migración: las listas guardadas sustituyen a las de serie, así que lo nuevo se añade aquí una sola vez.
+    if ((saved.schema || 1) < SETTINGS_SCHEMA && Object.keys(saved).length) {
+      for (const z of DEFAULT_PRINT_SIZES.filter((d) => d.card)) {
+        if (!settings.printSizes.some((s) => s.id === z.id)) {
+          const base = settings.printSizes.find((s) => s.id === '10x15');
+          settings.printSizes.splice(settings.printSizes.indexOf(base) + 1, 0, { ...z, printers: base ? [...(base.printers || [])] : [] });
+        }
+      }
+      // v4: la Polaroid cuadrada tiene imagen de 8,5x8,5 cm (antes 10x10) con 2 cm de margen inferior.
+      const pq = settings.printSizes.find((s) => s.id === 'pola10');
+      const def = DEFAULT_PRINT_SIZES.find((s) => s.id === 'pola10');
+      if (pq?.card?.win?.w === 100) Object.assign(pq, { name: def.name, card: structuredClone(def.card) });
+      settings.schema = SETTINGS_SCHEMA;
+      try { saveSettings(settings); } catch { /* se reintentará al guardar */ }
+    }
   }
   return settings;
 }

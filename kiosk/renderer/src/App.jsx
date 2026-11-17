@@ -4,11 +4,12 @@ import Home from './screens/Home.jsx';
 import Sources from './screens/Sources.jsx';
 import Studio from './screens/Studio.jsx';
 import IdPhoto from './screens/IdPhoto.jsx';
+import IdLots from './screens/IdLots.jsx';
 import Checkout, { Done } from './screens/Checkout.jsx';
 import Admin from './screens/Admin.jsx';
 import { Modal, Icon, TouchField, Busy } from './components/ui.jsx';
 import { checkFileName, extOf } from '../../shared/presets.js';
-import { DEFAULT_EDIT } from './screens/Studio.jsx';
+import { DEFAULT_EDIT, landOf } from './screens/Studio.jsx';
 
 const freshId = (s) => ({ presetId: null, custom: { w: 35, h: 45 }, people: [], sheetId: s.idDefaults.sheetId, gapMm: s.idDefaults.gapMm, marginMm: s.idDefaults.marginMm, guides: s.idDefaults.guides, faceGuides: s.idDefaults.faceGuides, separateSheets: false });
 
@@ -30,6 +31,7 @@ export default function App() {
   const [items, setItems] = useState([]);
   const [edits, setEdits] = useState({}); // por foto: filtro, color, giro, marco, encuadre y recorte por tamaño
   const [idState, setIdState] = useState(null);
+  const [idLots, setIdLots] = useState([]);
   const [spec, setSpec] = useState(null);
   const [orderOpts, setOrderOpts] = useState({});
   const [result, setResult] = useState(null);
@@ -96,6 +98,13 @@ export default function App() {
   /** Importa (copia el original y crea vistas previas) un elemento del carrete cuando entra en el pedido. */
   const ensurePhoto = useCallback(async (e) => {
     if (e.photo) return e.photo;
+    // Copia virtual: comparte el original con su foto de origen.
+    if (e.virtualOf) {
+      const src = rollRef.current.find((x) => x.key === e.virtualOf);
+      const p = src && (await ensurePhotoRef.current(src));
+      if (p) setRoll((r) => r.map((x) => (x.key === e.key ? { ...x, photo: p } : x)));
+      return p || null;
+    }
     try {
       const [photo] = await api('roll:import', [{ path: e.path, page: e.page, remote: e.remote, name: e.name, origin: e.origin }]);
       if (!photo) { setRoll((r) => r.filter((x) => x.key !== e.key)); return null; }
@@ -103,6 +112,29 @@ export default function App() {
       return photo;
     } catch (err) { toast({ type: 'error', text: err.message }); return null; }
   }, [toast]);
+  const ensurePhotoRef = useRef(ensurePhoto);
+  ensurePhotoRef.current = ensurePhoto;
+
+  /** Copia virtual: nueva entrada del carrete con el mismo original y ajustes independientes (parte de los actuales). */
+  const virtualCopy = (e) => {
+    const base = e.virtualOf || e.key;
+    let n = 1;
+    while (rollRef.current.some((x) => x.key === `v${n}:${base}`)) n++;
+    const key = `v${n}:${base}`;
+    const src = rollRef.current.find((x) => x.key === base) || e;
+    setRoll((r) => {
+      const i = r.findIndex((x) => x.key === e.key);
+      const v = { ...src, key, virtualOf: base, name: `${src.name} · copia ${n}` };
+      return [...r.slice(0, i + 1), v, ...r.slice(i + 1)];
+    });
+    setEdits((all) => (all[e.key] ? { ...all, [key]: JSON.parse(JSON.stringify(all[e.key])) } : all));
+    toast({ type: 'ok', text: 'Copia virtual creada: puedes encuadrarla y editarla por separado' });
+  };
+  const removeVirtual = (e) => {
+    setRoll((r) => r.filter((x) => x.key !== e.key));
+    setItems((l) => l.filter((i) => i.rollKey !== e.key));
+    setEdits((all) => { const n = { ...all }; delete n[e.key]; return n; });
+  };
 
   useEffect(() => {
     api('settings:public').then(setSettings);
@@ -116,7 +148,7 @@ export default function App() {
 
   const finish = useCallback(async () => {
     await api('session:clear');
-    setRoll([]); setItems([]); setEdits({}); setSpec(null); setResult(null); setIdleWarn(0); setOrderOpts({}); setIssues([]);
+    setRoll([]); setItems([]); setEdits({}); setIdLots([]); setSpec(null); setResult(null); setIdleWarn(0); setOrderOpts({}); setIssues([]);
     setScreen('home');
   }, []);
 
@@ -136,7 +168,7 @@ export default function App() {
 
   const start = async (f, src = 'usb') => {
     await api('session:new');
-    setFlow(f); setInitialSource(src); setItems([]); setEdits({}); setRoll([]); setOrderOpts({});
+    setFlow(f); setInitialSource(src); setItems([]); setEdits({}); setRoll([]); setIdLots([]); setOrderOpts({});
     setIdState(freshId(settings));
     setScreen('sources');
   };
@@ -144,24 +176,39 @@ export default function App() {
   /** Abre un pedido guardado (retenido o para reprocesar) con todos sus ajustes. */
   const openOrder = (o, opts) => {
     const entries = o.photos.map((p) => entryFrom({ photo: p }, p.origin || 'Pedido guardado'));
+    // Las copias virtuales se vuelven a crear a partir de su foto de origen.
+    for (const it of o.spec.items || []) {
+      if (!it.vc) continue;
+      const base = `p:${it.photoId}`;
+      const key = `${it.vc}:${base}`;
+      const src = entries.find((e) => e.key === base);
+      if (src && !entries.some((e) => e.key === key)) entries.splice(entries.indexOf(src) + 1, 0, { ...src, key, virtualOf: base, name: `${src.name} · copia ${it.vc.slice(1)}` });
+    }
     setRoll(entries);
     setOrderOpts(opts);
-    setFlow(o.kind === 'id' ? 'id' : 'prints');
-    if (o.kind === 'id') {
+    setFlow(o.kind === 'id' || o.spec?.kind === 'idlots' ? 'id' : 'prints');
+    if (o.spec?.kind === 'idlots') {
+      setIdLots(o.spec.lots.map((l, i) => ({ ...l, uid: `o${i}`, rollKey: `p:${l.photoId}` })));
+      setScreen('idlots');
+    } else if (o.kind === 'id') {
       setIdState({ ...freshId(settings), ...o.spec, people: o.spec.people.map((p) => ({ ...p, rollKey: `p:${p.photoId}` })) });
       setScreen('id');
     } else {
       // Se reconstruyen las copias por tamaño y los ajustes de cada foto.
       const ed = {};
       for (const it of o.spec.items) {
-        const rk = `p:${it.photoId}`;
-        const cur = ed[rk] || { ...DEFAULT_EDIT, adjust: it.adjust || DEFAULT_EDIT.adjust, angle: it.angle || 0, mask: it.mask || '', mode: it.mode || 'fill', bg: it.bg || '#ffffff', crops: {}, land: {} };
+        const rk = it.vc ? `${it.vc}:p:${it.photoId}` : `p:${it.photoId}`;
+        const cur = ed[rk] || {
+          ...DEFAULT_EDIT, adjust: it.adjust || DEFAULT_EDIT.adjust, angle: it.angle || 0, mask: it.mask || '', mode: it.mode || 'fill', bg: it.bg || '#ffffff',
+          border: !!it.border, borderMm: it.borderMm || 5, borderColor: it.borderColor || '#ffffff', overlay: it.overlay || { texts: [], strokes: [] }, crops: {}, fits: {}, land: {}
+        };
         cur.crops[it.sizeId] = it.crop || null;
+        cur.fits[it.sizeId] = it.fit || null;
         cur.land[it.sizeId] = !!it.landscape;
         ed[rk] = cur;
       }
       setEdits(ed);
-      setItems(o.spec.items.map((it, i) => ({ key: `r${i}`, rollKey: `p:${it.photoId}`, photoId: it.photoId, sizeId: it.sizeId, qty: it.qty })));
+      setItems(o.spec.items.map((it, i) => ({ key: `r${i}`, rollKey: it.vc ? `${it.vc}:p:${it.photoId}` : `p:${it.photoId}`, photoId: it.photoId, sizeId: it.sizeId, qty: it.qty })));
       setScreen('studio');
     }
   };
@@ -181,6 +228,8 @@ export default function App() {
   };
 
   if (!settings) return null;
+  // Fotos de carnet: lotes nuevos; los pedidos antiguos por formato se siguen abriendo en su pantalla.
+  const idScreen = idState?.people?.length ? 'id' : 'idlots';
   const issue = issues[0];
   const closeIssue = (answer) => { issue.resolve(answer); setIssues((l) => l.slice(1)); };
   /** Especificación del pedido: cada copia lleva los ajustes de su foto y el recorte de su tamaño. */
@@ -189,9 +238,16 @@ export default function App() {
     items: items.map((it) => {
       const ed = { ...DEFAULT_EDIT, ...(edits[it.rollKey] || {}) };
       const ph = roll.find((e) => e.key === it.rollKey)?.photo;
+      const size = settings.printSizes.find((s) => s.id === it.sizeId);
+      const ov = ed.overlay || {};
+      const vc = it.rollKey.startsWith('v') ? it.rollKey.split(':')[0] : undefined;
       return {
         photoId: it.photoId, sizeId: it.sizeId, qty: it.qty, mode: ed.mode, bg: ed.bg, mask: ed.mask, adjust: ed.adjust, angle: ed.angle,
-        crop: ed.crops[it.sizeId] || null, landscape: ed.land[it.sizeId] ?? (ph ? ph.w > ph.h : false)
+        crop: ed.crops[it.sizeId] || null, fit: ed.mode === 'fit' ? ed.fits?.[it.sizeId] || null : null,
+        landscape: landOf(ed, size, ph),
+        border: !size?.card && !!ed.border, borderMm: ed.borderMm || 5, borderColor: ed.borderColor || '#ffffff',
+        overlay: ov.texts?.length || ov.strokes?.length ? ov : null,
+        ...(vc ? { vc, name: roll.find((e) => e.key === it.rollKey)?.name } : {})
       };
     })
   });
@@ -202,11 +258,12 @@ export default function App() {
       {screen === 'sources' && (
         <Sources session={session} settings={settings} flow={flow} roll={roll} initial={initialSource} onLoad={loadIntoRoll}
           backLabel={roll.length ? 'Volver a mis fotos' : 'Cancelar'}
-          onBack={() => (roll.length ? setScreen(flow === 'id' ? 'id' : 'studio') : finish())}
-          onNext={() => setScreen(flow === 'id' ? 'id' : 'studio')} />
+          onBack={() => (roll.length ? setScreen(flow === 'id' ? idScreen : 'studio') : finish())}
+          onNext={() => setScreen(flow === 'id' ? idScreen : 'studio')} />
       )}
       {screen === 'studio' && (
         <Studio settings={settings} roll={roll} items={items} setItems={setItems} edits={edits} setEdits={setEdits} ensurePhoto={ensurePhoto} toast={toast}
+          onVirtualCopy={virtualCopy} onRemoveVirtual={removeVirtual}
           onAddMore={() => { setInitialSource('usb'); setScreen('sources'); }}
           onHold={() => setHoldOpen(printSpec())}
           onCancel={finish}
@@ -217,8 +274,13 @@ export default function App() {
           onBack={finish} onAddMore={() => setScreen('sources')} onHold={(s) => setHoldOpen(s)}
           onNext={(s) => { setSpec(s); setScreen('checkout'); }} />
       )}
+      {screen === 'idlots' && (
+        <IdLots settings={settings} roll={roll} ensurePhoto={ensurePhoto} lots={idLots} setLots={setIdLots}
+          onBack={finish} onAddMore={() => setScreen('sources')} onHold={(s) => setHoldOpen(s)}
+          onNext={(s) => { setSpec(s); setScreen('checkout'); }} />
+      )}
       {screen === 'checkout' && spec && (
-        <Checkout settings={settings} spec={spec} orderOpts={orderOpts} onBack={() => setScreen(spec.kind === 'id' ? 'id' : 'studio')}
+        <Checkout settings={settings} spec={spec} orderOpts={orderOpts} onBack={() => setScreen(spec.kind === 'idlots' ? 'idlots' : spec.kind === 'id' ? 'id' : 'studio')}
           onDone={(r) => { setResult(r); setScreen('done'); }} />
       )}
       {screen === 'done' && result && <Done result={result} settings={settings} onFinish={finish} />}

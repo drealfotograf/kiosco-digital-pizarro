@@ -99,11 +99,16 @@ function FolderNav({ root, rootLabel, origin, load }) {
       <div className="load-bar">
         <div className="col" style={{ gap: 2 }}>
           <b>{data ? `${data.images} foto${data.images === 1 ? '' : 's'} en esta carpeta` : 'Leyendo…'}</b>
-          {data && data.folders.length > 0 && <label className="row small" style={{ gap: 8 }}><input type="checkbox" checked={sub} onChange={(e) => setSub(e.target.checked)} style={{ width: 22, height: 22 }} /> Incluir las {data.folders.length} subcarpetas</label>}
+          {data && data.folders.length > 0 && <span className="small muted">y {data.folders.length} subcarpeta{data.folders.length === 1 ? '' : 's'}</span>}
         </div>
-        <button className="btn primary lg" disabled={!data} onClick={() => load(async () => localFiles(await api('folder:scan', dir, sub)), origin)}>
-          <Icon name="download" /> Cargar fotos
-        </button>
+        <div className="row" style={{ gap: 10 }}>
+          <button className="btn lg" disabled={!data || !data.images} onClick={() => load(async () => localFiles(await api('folder:scan', dir, false)), origin)}>
+            <Icon name="folder" /> Solo esta carpeta
+          </button>
+          <button className="btn primary lg" disabled={!data} onClick={() => load(async () => localFiles(await api('folder:scan', dir, true)), origin)}>
+            <Icon name="download" /> Todo (con subcarpetas)
+          </button>
+        </div>
       </div>
       {data?.folders.length > 0 && (
         <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
@@ -320,9 +325,12 @@ function ServerPanel({ load }) {
           <div className="load-bar">
             <div className="col" style={{ gap: 2 }}>
               <b>{imgs} foto{imgs === 1 ? '' : 's'} en esta carpeta</b>
-              {data.folders.length > 0 && <label className="row small" style={{ gap: 8 }}><input type="checkbox" checked={sub} onChange={(e) => setSub(e.target.checked)} style={{ width: 22, height: 22 }} /> Incluir las {data.folders.length} subcarpetas</label>}
+              {data.folders.length > 0 && <span className="small muted">y {data.folders.length} subcarpeta{data.folders.length === 1 ? '' : 's'}</span>}
             </div>
-            <button className="btn primary lg" onClick={() => load(async () => remoteFiles(sub ? (await api('srvshare:list', rel, true)).files : data.files), 'Carpeta del servidor')}><Icon name="download" /> Cargar fotos</button>
+            <div className="row" style={{ gap: 10 }}>
+              <button className="btn lg" disabled={!imgs} onClick={() => load(async () => remoteFiles(data.files), 'Carpeta del servidor')}><Icon name="folder" /> Solo esta carpeta</button>
+              <button className="btn primary lg" onClick={() => load(async () => remoteFiles((await api('srvshare:list', rel, true)).files), 'Carpeta del servidor')}><Icon name="download" /> Todo (con subcarpetas)</button>
+            </div>
           </div>
           <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
             {data.folders.map((f) => <div key={f.path} className="folder" onClick={() => setRel(f.path)}><Icon name="folder" /> {f.name}</div>)}

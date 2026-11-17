@@ -14,7 +14,7 @@ export const orderDir = (no) => path.join(root(), path.basename(String(no)));
 
 /** Fotos usadas por la especificación del pedido. */
 export function photoIdsOf(spec) {
-  return [...new Set((spec.kind === 'id' ? spec.people : spec.items).map((x) => x.photoId))];
+  return [...new Set((spec.kind === 'id' ? spec.people : spec.kind === 'idlots' ? spec.lots : spec.items).map((x) => x.photoId))];
 }
 
 /**

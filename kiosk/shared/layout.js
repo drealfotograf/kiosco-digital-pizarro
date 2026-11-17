@@ -160,3 +160,90 @@ export function cutGuides(layout, photo, type = 'marks', markLen = 3) {
   }
   return lines;
 }
+
+// ---------- Maquetación de la copia: papel, tarjeta (Polaroid) y ventana de la foto ----------
+/**
+ * Devuelve dónde va la foto dentro del papel (todo en mm):
+ *  - paper: tamaño del papel (con la orientación elegida).
+ *  - card: zona visible del producto (Polaroid: el marco blanco; resto: el papel entero). Debajo se marca el corte.
+ *  - win: ventana de la foto. Con borde, se reduce `border` mm por cada lado.
+ * size.card = { h, win:{x,y,w,h} } define un formato Polaroid sobre papel vertical.
+ */
+export function printLayout(size, landscape = false, border = 0) {
+  if (size.card) {
+    const paper = { w: Math.min(size.w, size.h), h: Math.max(size.w, size.h) };
+    return { paper, card: { x: 0, y: 0, w: paper.w, h: size.card.h }, win: { ...size.card.win }, polaroid: true };
+  }
+  const paper = frameDims(size, landscape);
+  const b = Math.max(0, Math.min(Number(border) || 0, Math.min(paper.w, paper.h) / 4));
+  return { paper, card: { x: 0, y: 0, w: paper.w, h: paper.h }, win: { x: b, y: b, w: paper.w - 2 * b, h: paper.h - 2 * b }, polaroid: false };
+}
+
+// ---------- Ampliar con márgenes: colocación libre de la foto dentro del marco ----------
+/** fit = { s: escala respecto a «cabe entera» (1 = cabe justa), dx, dy: desplazamiento en fracción del marco }. */
+export const DEFAULT_FIT = { s: 1, dx: 0, dy: 0 };
+export function fitRect(pw, ph, W, H, angle = 0, fit = DEFAULT_FIT) {
+  const a = Math.abs(angle * Math.PI / 180);
+  const bw = pw * Math.cos(a) + ph * Math.sin(a);
+  const bh = pw * Math.sin(a) + ph * Math.cos(a);
+  const s = Math.min(W / bw, H / bh) * (fit?.s || 1);
+  const w = pw * s, h = ph * s;
+  return { w, h, x: (W - w) / 2 + (fit?.dx || 0) * W, y: (H - h) / 2 + (fit?.dy || 0) * H, scale: s };
+}
+
+// ---------- Lotes de fotos de carné ----------
+/**
+ * Plantillas de lote (todas en papel 10x15, mm):
+ *  - kind 'grid': cols x rows fotos de pw x ph; separación proporcional (igual entre fotos y a los bordes).
+ *  - kind 'grid+big': como 'grid' pero las últimas columnas se sustituyen por una foto grande big {w,h}.
+ * Devuelve { sheetW, sheetH, slots:[{x,y,w,h,big}] }.
+ */
+export function lotSlots(lot) {
+  const sheet = lot.landscape === false ? { w: 102, h: 152 } : { w: 152, h: 102 };
+  const pw = lot.pw || 35, ph = lot.ph || 45;
+  const slots = [];
+  if (lot.kind === 'grid+big') {
+    const cols = lot.cols || 2, rows = lot.rows || 2, big = lot.big || { w: 70, h: 100 };
+    const gx = (sheet.w - cols * pw - big.w) / (cols + 2);
+    const gy = (sheet.h - rows * ph) / (rows + 1);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) slots.push({ x: gx + c * (pw + gx), y: gy + r * (ph + gy), w: pw, h: ph, big: false });
+    slots.push({ x: gx + cols * (pw + gx), y: (sheet.h - big.h) / 2, w: big.w, h: big.h, big: true });
+  } else {
+    const cols = lot.cols || 4, rows = lot.rows || 2;
+    const gx = (sheet.w - cols * pw) / (cols + 1);
+    const gy = (sheet.h - rows * ph) / (rows + 1);
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) slots.push({ x: gx + c * (pw + gx), y: gy + r * (ph + gy), w: pw, h: ph, big: false });
+  }
+  return { sheetW: sheet.w, sheetH: sheet.h, slots };
+}
+
+/** Marcas de corte para huecos arbitrarios (prolongación de cada borde de foto hacia fuera, sin pisar otras fotos). */
+export function slotGuides(slots, len = 3, gap = 0.6) {
+  const lines = [];
+  // Espacio libre hasta la foto vecina en cada dirección; la marca nunca pasa de la mitad de ese hueco.
+  const room = (s, dir) => {
+    let best = Infinity;
+    for (const o of slots) {
+      if (o === s) continue;
+      const ovY = o.y < s.y + s.h && o.y + o.h > s.y;
+      const ovX = o.x < s.x + s.w && o.x + o.w > s.x;
+      if (dir === 'up' && ovX && o.y + o.h <= s.y) best = Math.min(best, s.y - (o.y + o.h));
+      if (dir === 'down' && ovX && o.y >= s.y + s.h) best = Math.min(best, o.y - (s.y + s.h));
+      if (dir === 'left' && ovY && o.x + o.w <= s.x) best = Math.min(best, s.x - (o.x + o.w));
+      if (dir === 'right' && ovY && o.x >= s.x + s.w) best = Math.min(best, o.x - (s.x + s.w));
+    }
+    return best === Infinity ? len : Math.max(0, Math.min(len, best / 2 - gap));
+  };
+  for (const s of slots) {
+    const up = room(s, 'up'), down = room(s, 'down'), left = room(s, 'left'), right = room(s, 'right');
+    for (const x of [s.x, s.x + s.w]) {
+      if (up > 0.2) lines.push({ x1: x, y1: s.y - gap - up, x2: x, y2: s.y - gap });
+      if (down > 0.2) lines.push({ x1: x, y1: s.y + s.h + gap, x2: x, y2: s.y + s.h + gap + down });
+    }
+    for (const y of [s.y, s.y + s.h]) {
+      if (left > 0.2) lines.push({ x1: s.x - gap - left, y1: y, x2: s.x - gap, y2: y });
+      if (right > 0.2) lines.push({ x1: s.x + s.w + gap, y1: y, x2: s.x + s.w + gap + right, y2: y });
+    }
+  }
+  return lines;
+}

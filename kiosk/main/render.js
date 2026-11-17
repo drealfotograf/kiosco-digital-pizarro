@@ -3,7 +3,8 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { dataDir } from './config.js';
-import { clampCrop, defaultCrop, clampCropRot, rotatedCenter, mmToPx, sheetLayout, cutGuides } from '../shared/layout.js';
+import { clampCrop, defaultCrop, clampCropRot, rotatedCenter, mmToPx, sheetLayout, cutGuides, fitRect, DEFAULT_FIT, printLayout, lotSlots, slotGuides } from '../shared/layout.js';
+import { renderOverlay } from './overlay.js';
 import { buildMatrix, isIdentity } from '../shared/color.js';
 
 const WHITE = { r: 255, g: 255, b: 255, alpha: 1 };
@@ -26,24 +27,33 @@ function applyAdjust(img, adjust) {
  * Renderiza una foto a su tamaño final (px). Devuelve PNG en memoria.
  * mode 'fill' = recorte que llena el papel; 'fit' = ampliar con márgenes del color bg.
  */
-export async function renderPhotoBuffer(photo, { crop, mode = 'fill', bg = '#ffffff', adjust, angle = 0, wMm, hMm, dpi, mask }) {
+export async function renderPhotoBuffer(photo, { crop, fit, mode = 'fill', bg = '#ffffff', adjust, angle = 0, wMm, hMm, dpi, mask }) {
   const W = mmToPx(wMm, dpi);
   const H = mmToPx(hMm, dpi);
   const ang = Math.abs(angle) < 0.05 ? 0 : Number(angle) || 0;
   let buf;
   if (mode === 'fit') {
-    // La foto entera (girada si se ha enderezado) dentro del tamaño pedido; lo que falta se rellena con el color elegido.
-    // El filtro se aplica antes de girar, así los márgenes no se tiñen.
-    let inner = await applyAdjust(sharp(photo.src, { failOn: 'none' }).rotate().resize(W, H, { fit: 'inside' }).flatten({ background: WHITE }), adjust)
+    // Ampliar con márgenes: la foto (girada si se ha enderezado) se coloca libremente: escala y posición elegidas por el cliente.
+    // Lo que queda sin foto se rellena con el color elegido. El filtro se aplica antes de girar, así los márgenes no se tiñen.
+    const r = fitRect(photo.w, photo.h, W, H, ang, fit || DEFAULT_FIT);
+    const cx = r.x + r.w / 2, cy = r.y + r.h / 2;
+    let inner = await applyAdjust(sharp(photo.src, { failOn: 'none' }).rotate().resize(Math.max(1, Math.round(r.w)), Math.max(1, Math.round(r.h)), { fit: 'fill' }).flatten({ background: WHITE }), adjust)
       .png({ compressionLevel: 1 }).toBuffer();
-    if (ang) {
-      inner = await sharp(inner).ensureAlpha().rotate(ang, { background: { r: 0, g: 0, b: 0, alpha: 0 } }).png({ compressionLevel: 1 }).toBuffer();
-      inner = await sharp(inner).resize(W, H, { fit: 'inside' }).png({ compressionLevel: 1 }).toBuffer();
-    }
+    if (ang) inner = await sharp(inner).ensureAlpha().rotate(ang, { background: { r: 0, g: 0, b: 0, alpha: 0 } }).png({ compressionLevel: 1 }).toBuffer();
     const meta = await sharp(inner).metadata();
+    const left = Math.round(cx - meta.width / 2), top = Math.round(cy - meta.height / 2);
+    // Recorte de la parte que se sale del marco (sharp no admite superposiciones fuera del lienzo).
+    const sx = Math.max(0, -left), sy = Math.max(0, -top);
+    const ex = Math.min(meta.width, W - left), ey = Math.min(meta.height, H - top);
+    const comps = [];
+    if (ex - sx > 0 && ey - sy > 0) {
+      const part = (sx || sy || ex < meta.width || ey < meta.height)
+        ? await sharp(inner).extract({ left: sx, top: sy, width: ex - sx, height: ey - sy }).png({ compressionLevel: 1 }).toBuffer()
+        : inner;
+      comps.push({ input: part, left: left + sx, top: top + sy });
+    }
     buf = await sharp({ create: { width: W, height: H, channels: 3, background: parseColor(bg) } })
-      .composite([{ input: inner, left: Math.round((W - meta.width) / 2), top: Math.round((H - meta.height) / 2) }])
-      .png({ compressionLevel: 1 }).toBuffer();
+      .composite(comps).png({ compressionLevel: 1 }).toBuffer();
   } else if (ang) {
     // Enderezar: se gira la imagen entera y se recorta el marco (que nunca sale de la foto).
     const base = await sharp(photo.src, { failOn: 'none' }).rotate().flatten({ background: WHITE }).raw().toBuffer({ resolveWithObject: true });
@@ -152,4 +162,58 @@ export async function ensureSampleMasks() {
     <text x="${W / 2}" y="${H - 85}" font-family="Arial, sans-serif" font-size="46" letter-spacing="8" fill="#a08566" text-anchor="middle">17 · 11 · 2026</text></svg>`;
   await sharp(Buffer.from(frame)).png().toFile(path.join(dir, 'Marco blanco.png'));
   await sharp(Buffer.from(event)).png().toFile(path.join(dir, 'Evento - Nuestro gran dia.png'));
+}
+
+/**
+ * Copia completa: papel con la foto en su ventana (borde o Polaroid), línea de corte y texto/escritura.
+ * item: { crop, fit, mode, bg, adjust, angle, mask, landscape, border, borderMm, borderColor, overlay }
+ * Devuelve { buf, W, H } del papel entero.
+ */
+export async function renderPrint(photo, item, size, dpi) {
+  const L = printLayout(size, !!item.landscape, item.border ? (item.borderMm ?? 5) : 0);
+  const { buf: photoBuf } = await renderPhotoBuffer(photo, {
+    crop: item.crop, fit: item.fit, mode: item.mode, bg: item.bg, adjust: item.adjust, angle: item.angle, mask: item.mask,
+    wMm: L.win.w, hMm: L.win.h, dpi
+  });
+  const PW = mmToPx(L.paper.w, dpi), PH = mmToPx(L.paper.h, dpi);
+  const overlay = await renderOverlay(item.overlay, mmToPx(L.card.w, dpi), mmToPx(L.card.h, dpi));
+  if (!L.polaroid && !item.border && !overlay) return { buf: photoBuf, W: PW, H: PH };
+  const comps = [{ input: photoBuf, left: mmToPx(L.win.x, dpi), top: mmToPx(L.win.y, dpi) }];
+  if (L.polaroid && L.card.h < L.paper.h) {
+    // Línea de corte discontinua al final de la Polaroid (el resto del papel 10x15 se recorta).
+    const y = mmToPx(L.card.h, dpi);
+    const sw = Math.max(1, Math.round(dpi / 150));
+    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}"><line x1="0" y1="${y}" x2="${PW}" y2="${y}" stroke="#b9b2a6" stroke-width="${sw}" stroke-dasharray="${sw * 8} ${sw * 6}"/></svg>`), left: 0, top: 0 });
+  }
+  if (overlay) comps.push({ input: overlay, left: mmToPx(L.card.x, dpi), top: mmToPx(L.card.y, dpi) });
+  const buf = await sharp({ create: { width: PW, height: PH, channels: 3, background: parseColor(L.polaroid ? '#ffffff' : (item.borderColor || '#ffffff')) } })
+    .composite(comps).png({ compressionLevel: 1 }).toBuffer();
+  return { buf, W: PW, H: PH };
+}
+
+/**
+ * Hoja de un lote de carné: misma foto en todos los huecos (el hueco grande usa su propio encuadre),
+ * con marcas de corte y/o marco fino alrededor de cada foto si se han activado.
+ */
+export async function renderLotSheet(photo, entry, lot, dpi) {
+  const L = lotSlots(lot);
+  const W = mmToPx(L.sheetW, dpi), H = mmToPx(L.sheetH, dpi);
+  const cache = new Map();
+  const comps = [];
+  for (const s of L.slots) {
+    const key = s.big ? 'big' : 'main';
+    if (!cache.has(key)) {
+      const { buf } = await renderPhotoBuffer(photo, { crop: s.big ? entry.cropBig : entry.crop, mode: 'fill', adjust: entry.adjust, angle: entry.angle, wMm: s.w, hMm: s.h, dpi });
+      cache.set(key, buf);
+    }
+    comps.push({ input: cache.get(key), left: mmToPx(s.x, dpi), top: mmToPx(s.y, dpi) });
+  }
+  const k = dpi / 25.4;
+  const sw = Math.max(1, Math.round(0.15 * k));
+  let svg = '';
+  if (entry.guides) svg += `<g stroke="#6b6b6b" stroke-width="${sw}">${slotGuides(L.slots).map((l) => `<line x1="${(l.x1 * k).toFixed(1)}" y1="${(l.y1 * k).toFixed(1)}" x2="${(l.x2 * k).toFixed(1)}" y2="${(l.y2 * k).toFixed(1)}"/>`).join('')}</g>`;
+  if (entry.border) svg += `<g fill="none" stroke="#333333" stroke-width="${Math.max(1, Math.round(0.2 * k))}">${L.slots.map((s) => `<rect x="${(s.x * k).toFixed(1)}" y="${(s.y * k).toFixed(1)}" width="${(s.w * k).toFixed(1)}" height="${(s.h * k).toFixed(1)}"/>`).join('')}</g>`;
+  if (svg) comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${svg}</svg>`), left: 0, top: 0 });
+  const buf = await sharp({ create: { width: W, height: H, channels: 3, background: WHITE } }).composite(comps).png({ compressionLevel: 1 }).toBuffer();
+  return { buf, W, H, sheet: { w: L.sheetW, h: L.sheetH } };
 }

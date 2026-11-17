@@ -2,9 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { api, fileUrl } from '../api.js';
 import { Icon } from '../components/ui.jsx';
 import AdminOrders from './AdminOrders.jsx';
+import LotPreview from '../components/LotPreview.jsx';
+import { sizeColor, DEFAULT_ID_OPTIONS } from '../../../shared/presets.js';
 
 const TABS = [
-  ['orders', 'Pedidos'], ['general', 'General'], ['sizes', 'Tamaños e impresoras'], ['tariffs', 'Tarifas'], ['id', 'Fotos carnet'], ['lots', 'Tipos de lotes'],
+  ['orders', 'Pedidos'], ['general', 'General'], ['print', 'Impresión y envío'], ['sizes', 'Tamaños e impresoras'], ['tariffs', 'Tarifas'], ['lots', 'Lotes de carnet'], ['id', 'Formatos carnet'],
   ['sources', 'Fuentes de fotos'], ['lab', 'Laboratorio y galerías'], ['masks', 'Máscaras y eventos']
 ];
 
@@ -111,34 +113,45 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
 
           {tab === 'lots' && (
             <>
-              <h2>Tipos de lotes de fotos carnet</h2>
-              <p className="muted" style={{ margin: 0 }}>Un lote fija cuántas fotos se imprimen por persona y su precio cerrado. El cliente lo elige en la pantalla de fotos carnet. Sin lotes, se cobra por hoja.</p>
-              <table className="t">
-                <thead><tr><th>Nombre</th><th>Formato</th><th style={{ width: 100 }}>Fotos</th><th style={{ width: 110 }}>Precio</th><th></th></tr></thead>
-                <tbody>
-                  {s.idLots.map((l, i) => (
-                    <tr key={l.id}>
-                      <td><input className="inp" value={l.name} onChange={(e) => listEdit('idLots', i, 'name', e.target.value)} /></td>
-                      <td><select className="inp" value={l.presetId || ''} onChange={(e) => listEdit('idLots', i, 'presetId', e.target.value)}>
-                        <option value="">Cualquier formato</option>
-                        {s.idPresets.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                      </select></td>
-                      <td><input className="inp" type="number" min="1" value={l.photos} onChange={(e) => listEdit('idLots', i, 'photos', Math.max(1, Number(e.target.value)))} /></td>
-                      <td><input className="inp" type="number" step="0.5" value={l.price} onChange={(e) => listEdit('idLots', i, 'price', Number(e.target.value))} /></td>
-                      <td><button className="btn sm danger" onClick={() => set('idLots', s.idLots.filter((_, j) => j !== i))}><Icon name="trash" size={18} /> Borrar</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="row"><button className="btn" onClick={() => set('idLots', [...s.idLots, { id: `lot${Date.now()}`, name: 'Nuevo lote', presetId: '', photos: 4, price: 6 }])}><Icon name="plus" /> Añadir lote</button></div>
+              <h2>Lotes de fotos de carnet</h2>
+              <p className="muted" style={{ margin: 0 }}>Cada lote es una hoja 10x15 con la misma foto. Activa los que se ofrecen en el kiosco, cambia el nombre y el precio por lote. La vista previa muestra cómo se imprime.</p>
+              <div className="lot-admin">
+                {(s.idLotTypes || []).map((l, i) => (
+                  <div key={l.id} className={`card col lot-card ${l.enabled === false ? 'off' : ''}`}>
+                    <LotPreview lot={l} entry={{ guides: s.idOptions?.guides, border: s.idOptions?.border }} width={300} />
+                    <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={l.enabled !== false} onChange={(e) => listEdit('idLotTypes', i, 'enabled', e.target.checked)} style={{ width: 24, height: 24 }} />Ofrecer en el kiosco</label>
+                    <input className="inp" value={l.name} onChange={(e) => listEdit('idLotTypes', i, 'name', e.target.value)} />
+                    <div className="row" style={{ flexWrap: 'nowrap' }}><span className="muted small" style={{ flex: 1 }}>Precio por lote</span><input className="inp" type="number" step="0.5" style={{ width: 110 }} value={l.price} onChange={(e) => listEdit('idLotTypes', i, 'price', Number(e.target.value))} /></div>
+                    <span className="muted small">{l.kind === 'grid+big' ? `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm + 1 de ${l.big.w}x${l.big.h} mm` : `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm`} · papel {l.landscape === false ? 'vertical' : 'horizontal'}</span>
+                  </div>
+                ))}
+              </div>
+              <h2>Opciones para el cliente</h2>
+              <div className="form">
+                {(() => { const o = { ...DEFAULT_ID_OPTIONS, ...(s.idOptions || {}) }; const so = (k, v) => set('idOptions', { ...o, [k]: v }); const c = (k, label) => <label className="row" style={{ gap: 8, color: 'var(--ink)' }}><input type="checkbox" checked={!!o[k]} onChange={(e) => so(k, e.target.checked)} style={{ width: 24, height: 24 }} />{label}</label>; return (<>
+                  <label>Guías de corte</label><div className="col" style={{ gap: 4 }}>{c('allowGuides', 'El cliente puede activarlas')}{c('guides', 'Activadas de inicio')}</div>
+                  <label>Marco de foto</label><div className="col" style={{ gap: 4 }}>{c('allowBorder', 'El cliente puede activarlo')}{c('border', 'Activado de inicio')}</div>
+                  <label>Guías de cara</label>{c('faceGuides', 'Mostrar al encuadrar')}
+                </>); })()}
+              </div>
             </>
           )}
+
+          {tab === 'print' && <DeliverySettings s={s} set={set} pin={pin} pick={pick} toast={toast} dirty={dirty} />}
 
           {tab === 'general' && (
             <>
               <h2>General</h2>
               <div className="form">
                 <label>Guardar pedidos durante (días)</label>{txt('ordersRetentionDays', { type: 'number', min: 1 })}
+                <label style={{ gridColumn: '1 / -1', marginTop: 10, color: 'var(--navy)' }}>Datos legales (RGPD y aviso legal de la pantalla de inicio)</label>
+                <label>Nombre o razón social</label>{txt('legal.company')}
+                <label>NIF / CIF</label>{txt('legal.nif')}
+                <label>Dirección</label>{txt('legal.address')}
+                <label>Correo de contacto</label>{txt('legal.email')}
+                <label>Teléfono</label>{txt('legal.phone')}
+                <label>Delegado de protección de datos</label>{txt('legal.dpo', { placeholder: 'Opcional' })}
+                <label>Registro mercantil</label>{txt('legal.registry', { placeholder: 'Solo si es sociedad' })}
                 <label>Nombre de la tienda</label>{txt('storeName')}
                 <label>Moneda</label>{txt('currency')}
                 <label>PIN de administración</label>{txt('adminPin')}
@@ -159,10 +172,11 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
               <h2>Tamaños de copia e impresoras</h2>
               <p className="muted" style={{ margin: 0 }}>Asigna una o varias impresoras a cada tamaño; los trabajos se reparten entre ellas. Un tamaño sin impresora solo se puede pedir al laboratorio.</p>
               <table className="t">
-                <thead><tr><th>Nombre</th><th>Ancho mm</th><th>Alto mm</th><th>Precio</th><th>Impresoras</th><th>Papel del driver</th><th>Lista rápida</th><th></th></tr></thead>
+                <thead><tr><th>Color</th><th>Nombre</th><th>Ancho mm</th><th>Alto mm</th><th>Precio</th><th>Impresoras</th><th>Papel del driver</th><th>Lista rápida</th><th></th></tr></thead>
                 <tbody>
                   {s.printSizes.map((z, i) => (
                     <tr key={i}>
+                      <td style={{ width: 54 }}><input type="color" value={sizeColor(s.printSizes, z.id)} title="Color de este tamaño en la zona de selección" onChange={(e) => listEdit('printSizes', i, 'color', e.target.value)} style={{ width: 40, height: 36, border: 0, background: 'none' }} /></td>
                       <td><input className="inp" value={z.name} onChange={(e) => listEdit('printSizes', i, 'name', e.target.value)} /></td>
                       <td style={{ width: 90 }}><input className="inp" type="number" value={z.w} onChange={(e) => listEdit('printSizes', i, 'w', Number(e.target.value))} /></td>
                       <td style={{ width: 90 }}><input className="inp" type="number" value={z.h} onChange={(e) => listEdit('printSizes', i, 'h', Number(e.target.value))} /></td>
@@ -339,5 +353,65 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
         </section>
       </div>
     </div>
+  );
+}
+
+/** Impresión y envío al servidor: qué se hace al confirmar un pedido. */
+function DeliverySettings({ s, set, pin, pick, toast, dirty }) {
+  const d = { print: true, server: false, serverFolder: 'Laboratorio', localFallback: '', retryMinutes: 5, ...(s.delivery || {}) };
+  const sd = (k, v) => set('delivery', { ...d, [k]: v });
+  const [folders, setFolders] = useState(null);
+  const [err, setErr] = useState('');
+  const load = async () => {
+    setErr('');
+    try { const r = await api('admin:serverFolders', pin); setFolders(r.folders || []); } catch (e) { setFolders([]); setErr(e.message); }
+  };
+  useEffect(() => { if (d.server) load(); }, [d.server]); // eslint-disable-line react-hooks/exhaustive-deps
+  const box = (k, label, hint) => (
+    <label className="row deliv-opt" style={{ gap: 12 }}>
+      <input type="checkbox" checked={!!d[k]} onChange={(e) => sd(k, e.target.checked)} style={{ width: 28, height: 28 }} />
+      <span className="col" style={{ gap: 2 }}><b>{label}</b><span className="muted small">{hint}</span></span>
+    </label>
+  );
+  return (
+    <>
+      <h2>Impresión y envío</h2>
+      <p className="muted" style={{ margin: 0 }}>Al confirmar un pedido se hace lo que actives aquí (una cosa, la otra o las dos).</p>
+      <div className="card col" style={{ maxWidth: 900 }}>
+        {box('print', 'Imprimir en este kiosco', 'Cada tamaño va a su impresora (Tamaños e impresoras). Si un tamaño no tiene impresora, el pedido se envía al servidor.')}
+        {box('server', 'Enviar al servidor', 'Copia en JPEG en una carpeta del servidor: AAAA_MM_DD_Nº / tamaño / AAAA_MM_DD_Nº_foto.jpeg')}
+        {!d.print && !d.server && <div style={{ color: 'var(--err)' }}>Activa al menos una de las dos opciones.</div>}
+      </div>
+      {d.server && (
+        <div className="form" style={{ maxWidth: 900 }}>
+          <label>Carpeta de destino en el servidor</label>
+          <div className="col" style={{ gap: 6 }}>
+            <div className="row" style={{ flexWrap: 'nowrap' }}>
+              <input className="inp" list="srv-folders" value={d.serverFolder || ''} onChange={(e) => sd('serverFolder', e.target.value)} placeholder="Laboratorio" />
+              <datalist id="srv-folders">{(folders || []).map((f) => <option key={f} value={f} />)}</datalist>
+              <button className="btn sm" onClick={load}>Actualizar</button>
+            </div>
+            {folders && folders.length > 0 && <div className="row" style={{ gap: 6 }}>{folders.map((f) => <button key={f} className={`chip sm ${d.serverFolder === f ? 'on' : ''}`} onClick={() => sd('serverFolder', f)}>{f}</button>)}</div>}
+            {err ? <span className="small" style={{ color: 'var(--err)' }}>No se pueden leer las carpetas del servidor: {err}</span>
+              : <span className="muted small">Son las subcarpetas de la «carpeta raíz de exportación» del servidor. Si escribes un nombre nuevo, se crea al enviar.</span>}
+          </div>
+          <label>Si el servidor no responde, guardar en</label>
+          <div className="row" style={{ flexWrap: 'nowrap' }}>
+            <input className="inp" value={d.localFallback || ''} onChange={(e) => sd('localFallback', e.target.value)} placeholder={'C:\\KioscoPizarro\\Pendientes'} />
+            <button className="btn sm" onClick={() => pick('delivery.localFallback')}>Elegir</button>
+          </div>
+          <label>Reintentar el envío cada</label>
+          <div className="row" style={{ flexWrap: 'nowrap' }}><input className="inp" type="number" min="1" max="120" style={{ width: 110 }} value={d.retryMinutes} onChange={(e) => sd('retryMinutes', Math.max(1, Number(e.target.value) || 5))} /><span className="muted">minutos</span></div>
+        </div>
+      )}
+      {d.server && (
+        <div className="row">
+          <button className="btn" disabled={dirty} onClick={async () => {
+            try { const n = await api('admin:retryPending', pin); toast({ type: 'ok', text: n ? `${n} pedido(s) pendientes enviados al servidor` : 'No hay pedidos pendientes, o el servidor sigue sin responder' }); } catch (e) { toast({ type: 'error', text: e.message }); }
+          }}>Reintentar pendientes ahora</button>
+          {dirty && <span className="muted small">Guarda antes de reintentar</span>}
+        </div>
+      )}
+    </>
   );
 }

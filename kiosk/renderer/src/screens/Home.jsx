@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Icon, Logo, Modal, TouchField } from '../components/ui.jsx';
 import { api } from '../api.js';
+import { LegalLink } from '../components/Legal.jsx';
 
 /** Inicio con la identidad Pizarro: panel azul con el logotipo y las opciones a la derecha. */
 export default function Home({ settings, onStart, onAdmin, onResume }) {
@@ -16,15 +17,15 @@ export default function Home({ settings, onStart, onAdmin, onResume }) {
   };
   const options = [
     { icon: 'print', title: 'Imprimir fotos', text: 'Desde tu móvil, USB, tarjeta, correo, Bluetooth o PDF.', go: () => onStart('prints') },
-    { icon: 'id', title: 'Fotos carnet', text: 'DNI, pasaporte y visados de Europa y EEUU, o tu medida.', go: () => onStart('id') },
+    { icon: 'id', title: 'Fotos carnet', text: 'Lotes de fotos 35x45 para DNI, pasaporte y otros documentos.', go: () => onStart('id') },
     { icon: 'gallery', title: 'Mi galería', text: 'Las fotos de tu sesión o evento, con tu código y contraseña.', go: () => onStart('prints', 'gallery') }
   ];
 
   return (
     <div className="home2">
       <aside className="brand-panel">
-        <Logo height={150} color="var(--cream)" />
-        <div className="col" style={{ gap: 18 }}>
+        <div className="brand-center">
+          <Logo height={170} color="var(--cream)" />
           <span className="tag">Impresión fotográfica</span>
           <h1>Tus recuerdos,<br /><em>impresos hoy.</em></h1>
         </div>
@@ -44,6 +45,7 @@ export default function Home({ settings, onStart, onAdmin, onResume }) {
           </button>
         ))}
         <button className="btn resume" onClick={() => { setCode(''); setRErr(''); setResumeOpen(true); }}><Icon name="list" /> Continuar un pedido guardado</button>
+        <LegalLink settings={settings} />
       </main>
 
       {resumeOpen && (

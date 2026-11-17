@@ -3,9 +3,9 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { getSettings, dataDir } from './config.js';
 import { getSession, makeCode } from './session.js';
-import { renderPhotoBuffer, saveJpeg, renderIdSheets } from './render.js';
+import { renderPhotoBuffer, saveJpeg, renderIdSheets, renderPrint, renderLotSheet } from './render.js';
 import { enqueuePrint, pickPrinter } from './print.js';
-import { sendToLab } from './lab.js';
+import { sendOrDefer, exportRelPaths } from './lab.js';
 import { saveOrder, getOrder, updateOrder, storedPhotos, orderDir, findHeld, deleteOrder, photoIdsOf } from './store.js';
 import { frameDims, sheetLayout, packSheets } from '../shared/layout.js';
 import { priceFor } from '../shared/presets.js';
@@ -39,6 +39,18 @@ const copiesOf = (p) => Math.max(1, (lotOf(p.lotId)?.photos ?? p.copies) | 0);
 /** Presupuesto calculado en el proceso principal (los precios no se fían de la interfaz). */
 export function quote(spec) {
   const s = getSettings();
+  if (spec.kind === 'idlots') {
+    // Lotes de carné: precio del lote × número de copias de ese lote.
+    let total = 0, sheets = 0;
+    for (const l of spec.lots) {
+      const lot = s.idLotTypes.find((t) => t.id === l.lotId);
+      if (!lot) throw new Error('Ese tipo de lote ya no está disponible');
+      const n = Math.max(1, l.copies | 0);
+      total += (Number(lot.price) || 0) * n;
+      sheets += n;
+    }
+    return { total, sheets, count: sheets };
+  }
   if (spec.kind === 'id') {
     const preset = resolvePreset(spec);
     const sheet = s.sheets.find((x) => x.id === spec.sheetId) || s.sheets[0];
@@ -67,6 +79,22 @@ async function renderOrder(spec, photos, outDir, progress) {
   const dpi = s.dpi || 300;
   await fsp.mkdir(outDir, { recursive: true });
   const files = [];
+  if (spec.kind === 'idlots') {
+    const sheetSize = s.printSizes.find((x) => x.id === '10x15') || s.printSizes.find((x) => Math.abs(x.w - 102) < 2 && Math.abs(x.h - 152) < 2) || { id: '10x15', name: '10 x 15 cm', printers: [] };
+    let i = 0;
+    for (const l of spec.lots) {
+      i++;
+      const lot = s.idLotTypes.find((t) => t.id === l.lotId);
+      const photo = photos[l.photoId];
+      if (!lot || !photo) throw new Error('Lote o foto no encontrados');
+      progress({ text: `Preparando lote ${i} de ${spec.lots.length}…` });
+      const { buf } = await renderLotSheet(photo, l, lot, dpi);
+      const file = path.join(outDir, `${String(i).padStart(3, '0')}_carnet_${lot.id}.jpg`);
+      await saveJpeg(buf, file, dpi, true);
+      files.push({ file, sizeName: `Carnet ${lot.name}`, wMm: 102, hMm: 152, qty: Math.max(1, l.copies | 0), size: sheetSize, original: `${path.basename(photo.name || 'foto', path.extname(photo.name || ''))} ${lot.name}` });
+    }
+    return files;
+  }
   if (spec.kind === 'id') {
     const preset = resolvePreset(spec);
     const sheet = s.sheets.find((x) => x.id === spec.sheetId) || s.sheets[0];
@@ -94,8 +122,8 @@ async function renderOrder(spec, photos, outDir, progress) {
     if (!size) throw new Error('Un tamaño del pedido ya no existe en las tarifas');
     if (!photo) throw new Error('Foto no encontrada');
     progress({ text: `Preparando foto ${i} de ${spec.items.length}…` });
-    const dims = frameDims(size, !!it.landscape);
-    const { buf } = await renderPhotoBuffer(photo, { crop: it.crop, mode: it.mode, bg: it.bg, adjust: it.adjust, angle: it.angle, wMm: dims.w, hMm: dims.h, dpi, mask: it.mask });
+    // Papel completo: foto, borde o Polaroid, línea de corte y texto/escritura a mano.
+    const { buf } = await renderPrint(photo, it, size, dpi);
     const file = path.join(outDir, `${String(i).padStart(3, '0')}_${size.id}_x${it.qty}.jpg`);
     await saveJpeg(buf, file, dpi, true);
     files.push({ file, sizeName: size.name, wMm: size.w, hMm: size.h, qty: Math.max(1, it.qty | 0), size, original: photo.name });
@@ -110,27 +138,38 @@ async function deliver(order, photos, progress) {
   try {
     await updateOrder(order.orderNo, { status: 'processing', error: null });
     const files = await renderOrder(order.spec, photos, outDir, progress);
-    if (order.destination === 'print') {
+    // Qué hacer: 'auto' sigue los ajustes (imprimir y/o servidor); 'print' y 'lab' fuerzan una sola acción.
+    const d = s.delivery || {};
+    const doPrint = order.destination === 'print' || (order.destination === 'auto' && d.print !== false);
+    const doServer = order.destination === 'lab' || (order.destination === 'auto' && !!d.server);
+    if (!doPrint && !doServer) throw new Error('No hay ninguna salida activada (imprimir o enviar al servidor). Revisa los ajustes.');
+    const result = { printed: false, server: null };
+    if (doPrint) {
       const jobs = [];
       for (const f of files) {
         const printer = pickPrinter(f.size);
-        if (!printer) throw new Error(`No hay impresora asignada para ${f.sizeName}. Puedes enviarlo al laboratorio.`);
+        if (!printer) throw new Error(`No hay impresora asignada para ${f.sizeName}.`);
         progress({ text: `Enviando a ${printer}…` });
         jobs.push(enqueuePrint(f.file, { printer, wMm: f.wMm, hMm: f.hMm, copies: f.qty, useDriverPaper: f.size.useDriverPaper }));
       }
       await Promise.all(jobs);
-    } else {
-      progress({ text: 'Enviando al laboratorio…' });
+      result.printed = true;
+    }
+    if (doServer) {
+      progress({ text: 'Enviando al servidor…' });
+      const rels = exportRelPaths(order.orderNo, order.createdAt, files);
       const record = {
         orderNo: order.orderNo, createdAt: order.createdAt, kind: order.kind, destination: 'lab', customer: order.customer || {},
         total: order.total, currency: s.currency, store: s.storeName,
-        items: files.map((f) => ({ file: path.basename(f.file), size: f.sizeName, wMm: f.wMm, hMm: f.hMm, qty: f.qty, original: f.original }))
+        items: files.map((f, i) => ({ file: path.basename(rels[i]), size: f.sizeName, wMm: f.wMm, hMm: f.hMm, qty: f.qty, original: f.original }))
       };
-      await sendToLab(record, files.map((f) => f.file));
+      // Si el servidor no responde, la copia queda en la ruta local alternativa y se reintenta sola.
+      result.server = await sendOrDefer(record, files.map((f) => f.file), rels);
     }
     await fsp.rm(outDir, { recursive: true, force: true });
-    await fsp.appendFile(dataDir('orders.log.jsonl'), JSON.stringify({ orderNo: order.orderNo, at: new Date().toISOString(), destination: order.destination, total: order.total }) + '\n');
-    return await updateOrder(order.orderNo, { status: order.destination === 'print' ? 'printed' : 'sent', error: null });
+    await fsp.appendFile(dataDir('orders.log.jsonl'), JSON.stringify({ orderNo: order.orderNo, at: new Date().toISOString(), destination: order.destination, total: order.total, result }) + '\n');
+    const updated = await updateOrder(order.orderNo, { status: result.printed ? 'printed' : 'sent', error: null, delivery: result });
+    return { ...updated, delivery: result };
   } catch (e) {
     await updateOrder(order.orderNo, { status: 'error', error: e.message }).catch(() => {});
     throw e;
@@ -148,16 +187,17 @@ export async function submitOrder(spec, progress = () => {}, opts = {}) {
   const s = getSettings();
   const { total, count } = quote(spec);
   const order = await saveOrder({
-    orderNo: nextOrderNo(), status: 'processing', kind: spec.kind, destination: spec.destination,
+    orderNo: nextOrderNo(), status: 'processing', kind: spec.kind, destination: spec.destination || 'auto',
     customer: spec.customer || {}, spec: stripSpec(spec), total, count, currency: s.currency, reprocessOf: opts.reprocessOf || undefined
   }, sessionPhotos());
+  let done;
   try {
-    await deliver(order, storedPhotos(order), progress);
+    done = await deliver(order, storedPhotos(order), progress);
   } catch (e) {
     throw new Error(`${e.message} (el pedido ${order.orderNo} queda guardado en «Pedidos con error»)`);
   }
   if (opts.resumeOf) { const held = await findHeld(opts.resumeOf); if (held) await deleteOrder(held.orderNo); }
-  return { orderNo: order.orderNo, total, count };
+  return { orderNo: order.orderNo, total, count, delivery: done?.delivery };
 }
 
 const stripSpec = ({ destination, customer, ...rest }) => rest;
@@ -178,18 +218,19 @@ export async function holdOrder(spec, customer = {}, existingCode) {
 export async function repeatOrder(no, indexes, destination, progress = () => {}) {
   const old = await getOrder(no);
   if (!old) throw new Error('Pedido no encontrado');
-  const list = old.kind === 'id' ? old.spec.people : old.spec.items;
+  const listKey = old.kind === 'id' ? 'people' : old.kind === 'idlots' ? 'lots' : 'items';
+  const list = old.spec[listKey];
   const pick = indexes?.length ? list.filter((_, i) => indexes.includes(i)) : list;
   if (!pick.length) throw new Error('No hay nada seleccionado para repetir');
-  const spec = old.kind === 'id' ? { ...old.spec, people: pick } : { ...old.spec, items: pick };
+  const spec = { ...old.spec, [listKey]: pick };
   const { total, count } = quote(spec);
   const photos = storedPhotos(old);
   const order = await saveOrder({
     orderNo: nextOrderNo(), status: 'processing', kind: old.kind, destination, customer: old.customer,
     spec, total, count, currency: getSettings().currency, repeatOf: old.orderNo
   }, Object.fromEntries(photoIdsOf(spec).map((id) => [id, photos[id]])));
-  await deliver(order, storedPhotos(order), progress);
-  return { orderNo: order.orderNo, total, count };
+  const done = await deliver(order, storedPhotos(order), progress);
+  return { orderNo: order.orderNo, total, count, delivery: done.delivery };
 }
 
 /** Reintentar un pedido con error tal cual. */

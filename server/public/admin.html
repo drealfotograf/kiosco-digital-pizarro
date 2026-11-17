@@ -59,6 +59,10 @@
             <input id="sshare" placeholder="D:\Fotos compartidas" style="width:100%">
           </label>
           <p class="muted small" style="margin:0">Todo lo que haya en esta carpeta (y sus subcarpetas) se ve desde los kioscos sin contraseña, en «Carpeta del servidor». Puedes compartirla en la red de Windows para que el personal deje fotos desde otros equipos.</p>
+          <label>Carpeta raíz de exportación de pedidos
+            <input id="sexport" placeholder="D:\Pedidos" style="width:100%">
+          </label>
+          <p class="muted small" style="margin:0">Cada subcarpeta es un destino que se puede elegir en el kiosco (por ejemplo «Laboratorio» o «Impresora grande»). Los pedidos se guardan como AAAA_MM_DD_Nº / tamaño / AAAA_MM_DD_Nº_foto.jpeg.</p>
           <label>Clave del kiosco <input id="skey" readonly style="width:100%" class="code"></label>
           <p class="muted small" style="margin:0">Cópiala en el kiosco: Administración → Laboratorio y galerías → Clave del kiosco.</p>
           <div class="row"><button class="btn primary" id="ssave">Guardar</button><button class="btn" id="sregen">Generar nueva clave</button><span id="smsg" class="muted small"></span></div>

@@ -368,6 +368,22 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
   - **Ajustes → Lotes de carnet con dos pestañas**, «Papel 10 x 15» y «Papel 15 x 20», con el número de lotes y cuántos se ofrecen. La pulsada ocupa toda la página.
     - Tarjetas compactas: vista previa de 140 px de alto como máximo, impresora del lote en un desplegable y uso en 2 líneas.
   - **Pestaña «Formatos carnet» eliminada:** las guías de cara van ahora en cada lote.
+  - **Ajustes → Impresoras rediseñado (`AdminPrinterStatus.jsx`, `main/printers.js`):**
+    - Solo se ven las impresoras, cada una con su icono, el papel que queda y su perfil.
+    - Al pulsar una se abre su panel: papel, tamaños que imprime (con «papel del driver» y prueba) y gestión de color.
+    - **Papel:** Windows no da las copias que quedan, así que el kiosco las cuenta.
+      - Al anotar un «Rollo nuevo» se indica el papel: DNP DS620 6x4", 5x7", 6x8" o 6x9", u «Otro» con su capacidad.
+      - Cada impresión descuenta lo que gasta (en un rollo 6x8", una 10x15 gasta media hoja). El contador lo lleva `printerCfg` y «Guardar» no lo pisa.
+      - **Avisos sin entrar:**
+        - un punto con las copias que quedan junto al icono de ajustes del inicio;
+        - un punto en «Impresoras» del menú;
+        - un correo, una vez por rollo, por el SMTP de Seguridad.
+    - **Color:**
+      - «sRGB» deja la corrección al driver; «Perfil ICC» hace que el kiosco convierta cada copia de sRGB al perfil de la impresora con sharp. Hay que desactivar la gestión de color del driver.
+      - Correcciones de brillo, contraste y saturación.
+      - «Cargar perfiles ICC…»: comprueba que sean perfiles ICC RGB de impresora. También se listan los instalados en Windows; los de pantalla quedan descartados.
+      - «Imprimir carta de color» de prueba.
+    - El contador real de la DS620 (papel y cinta) necesitaría las herramientas de DNP; queda como mejora.
   - **Pendiente:** unificar el formato del ticket y los códigos con las tarifas de Gestión Pizarro (el cliente dirá dónde están).
   - **Migración de ajustes (schema 5):** añade los lotes nuevos que falten.
   - **Migración de ajustes (schema 4):** las instalaciones existentes reciben las Polaroid y los lotes nuevos, y la Polaroid 10x10 antigua pasa a 8,5x8,5.
@@ -702,3 +718,13 @@ cd kiosk && npm install && npm start
   - Impresora por papel o por lote.
   - Fuera la pestaña «Formatos carnet».
   - Probado: lote 15x20 impreso en la impresora de su papel; sin países en la pantalla del cliente.
+- **Impresoras:**
+  - Iconos con panel de ajustes.
+  - Contador de papel por rollo con avisos (inicio, menú y correo).
+  - Gestión de color con perfiles ICC (cargados o de Windows) y correcciones.
+  - **Probado, todo correcto:**
+    - 34 perfiles de Windows leídos.
+    - Conversión al perfil Epson.
+    - Contador del rollo 6x8".
+    - Aviso por correo una sola vez.
+    - Iconos y panel a 1920x1080.

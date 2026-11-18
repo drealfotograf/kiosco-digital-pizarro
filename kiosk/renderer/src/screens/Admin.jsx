@@ -6,6 +6,7 @@ import AdminStats from './AdminStats.jsx';
 import AdminTariffs from './AdminTariffs.jsx';
 import AdminTools from './AdminTools.jsx';
 import AdminBackup from './AdminBackup.jsx';
+import AdminPrinterStatus from './AdminPrinterStatus.jsx';
 import LotPreview from '../components/LotPreview.jsx';
 import { FONT_CHOICES, DEFAULT_FONTS, fontStack } from '../../../shared/fonts.js';
 import { QUOTES } from '../components/Quotes.jsx';
@@ -29,7 +30,9 @@ function TierInput({ value, onChange }) {
 export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
   const [pin, setPin] = useState(initialPin);
   const [tab, setTab] = useState('orders');
-  const [lotPaperTab, setLotPaperTab] = useState('10x15'); // Lotes de carnet: pestaña de papel abierta
+  const [lotPaperTab, setLotPaperTab] = useState('10x15');
+  const [paperAlerts, setPaperAlerts] = useState([]);
+  useEffect(() => { api('printers:alerts').then(setPaperAlerts).catch(() => {}); }, [tab]); // Lotes de carnet: pestaña de papel abierta
   const [s, setS] = useState(null);
   const [printers, setPrinters] = useState([]);
   const [masks, setMasks] = useState([]);
@@ -74,7 +77,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
       </div>
       <div className="admin" style={{ flex: 1, minHeight: 0 }}>
         <nav>
-          {TABS.map(([id, l]) => <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{l}</button>)}
+          {TABS.map(([id, l]) => <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{l}{id === 'printers' && paperAlerts.length > 0 && <i className={`nav-dot ${paperAlerts.some((x) => x.level === 'empty') ? 'empty' : 'low'}`} title="Queda poco papel" />}</button>)}
           <div className="spacer" />
           <button className="btn danger" onClick={() => api('admin:quit', pin)}>Cerrar aplicación</button>
         </nav>
@@ -247,46 +250,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
             </>
           )}
 
-          {tab === 'printers' && (
-            <>
-              <h2>Impresoras</h2>
-              <div className="row" style={{ gap: 8 }}>
-                {printers.map((p) => <span key={p.name} className="chip sm on" style={{ cursor: 'default' }}>{p.displayName}{p.simulated ? ' · pruebas' : p.isDefault ? ' · predeterminada' : ''}</span>)}
-                {!printers.length && <span className="muted">No se ha encontrado ninguna impresora en Windows.</span>}
-                <button className="btn sm" onClick={() => api('printers:list').then(setPrinters)}>Actualizar impresoras</button>
-              </div>
-              <p className="muted" style={{ margin: 0 }}>Asigna una o varias impresoras a cada tamaño; los trabajos se reparten entre ellas. Los tamaños que solo se envían al servidor no necesitan impresora.</p>
-              <table className="t">
-                <thead><tr><th>Tamaño</th><th>Impresoras</th><th>Papel del driver</th><th></th></tr></thead>
-                <tbody>
-                  {s.printSizes.map((z, i) => {
-                    const out = sizeOutput(z, s);
-                    const auto = out !== 'server' && !(z.printers || []).length && s.simPrinter?.enabled && ds620Supports(z.w, z.h);
-                    return (
-                      <tr key={i} style={out === 'server' ? { opacity: 0.55 } : null}>
-                        <td style={{ width: 200 }}><b>{z.name}</b><div className="muted small">{z.w} x {z.h} mm{out === 'server' ? ' · solo servidor' : ''}</div></td>
-                        <td>
-                          {printers.map((p) => {
-                            const on = (z.printers || []).includes(p.name);
-                            return <span key={p.name} className={`pchip ${on ? 'on' : ''}`} onClick={() => listEdit('printSizes', i, 'printers', on ? z.printers.filter((x) => x !== p.name) : [...(z.printers || []), p.name])}>{p.displayName}</span>;
-                          })}
-                          {auto && <span className="muted small"> · sin asignar: usa la DS620 simulada</span>}
-                          {!auto && !(z.printers || []).length && out !== 'server' && <span className="small" style={{ color: 'var(--err)' }}> · sin impresora: no se puede imprimir aquí</span>}
-                        </td>
-                        <td style={{ textAlign: 'center', width: 130 }}><input type="checkbox" checked={!!z.useDriverPaper} onChange={(e) => listEdit('printSizes', i, 'useDriverPaper', e.target.checked)} title="Usar el tamaño de papel configurado en el driver" /></td>
-                        <td style={{ width: 110 }}>
-                          <button className="btn sm" disabled={!z.printers?.length || dirty} title={dirty ? 'Guarda primero' : ''} onClick={async () => {
-                            try { await api('admin:testPrint', pin, z.printers[0], z.id); toast({ type: 'ok', text: 'Página de prueba enviada' }); } catch (e) { toast({ type: 'error', text: e.message }); }
-                          }}>Prueba</button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </>
-          )}
-
+          {tab === 'printers' && <AdminPrinterStatus pin={pin} printers={printers} setPrinters={setPrinters} toast={toast} s={s} set={set} save={save} dirty={dirty} />}
           {tab === 'sources' && (
             <>
               <h2>Mi galería (solo personal)</h2>

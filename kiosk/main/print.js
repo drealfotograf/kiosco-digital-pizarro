@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { app } from 'electron';
 import { getSettings } from './config.js';
 import { ds620Supports } from '../shared/presets.js';
+import { preparePrintFile, consumePrint } from './printers.js';
 export { ds620Supports };
 
 // ---------- Impresora simulada DNP DS620 (para probar sin impresora ni papel) ----------
@@ -61,8 +62,18 @@ export function pickPrinter(size) {
   return list[i];
 }
 
-function printOne(file, { printer, wMm, hMm, copies, useDriverPaper }) {
-  if (printer === SIM_PRINTER) return simPrint(file, { wMm, hMm, copies });
+/** Imprime con la gestión de color de la impresora y descuenta el papel de su rollo. */
+async function printOne(file0, opts) {
+  const file = await preparePrintFile(file0, opts.printer);
+  try {
+    await (opts.printer === SIM_PRINTER ? simPrint(file, opts) : printRaw(file, opts));
+    await consumePrint(opts.printer, opts).catch(() => {});
+  } finally {
+    if (file !== file0) fsp.rm(file, { force: true }).catch(() => {});
+  }
+}
+
+function printRaw(file, { printer, wMm, hMm, copies, useDriverPaper }) {
   return new Promise(async (resolve, reject) => {
     const html = file.replace(/\.jpg$/i, '') + '.print.html';
     const pageCss = useDriverPaper

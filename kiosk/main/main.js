@@ -16,7 +16,8 @@ import { startEmailWatch, stopEmailWatch, emailStatus, testEmail } from './sourc
 import { openBluetoothReceiver, bluetoothInbox, recentBluetoothFiles } from './sources/bluetooth.js';
 import { listServerShare, downloadServerFile } from './sources/srvshare.js';
 import { ensureSampleMasks, renderPhotoBuffer, saveJpeg } from './render.js';
-import { listPrinters, testPrint, simFolder } from './print.js';
+import { listPrinters, testPrint, simFolder, enqueuePrint } from './print.js';
+import { MEDIA, mediaStatus, changeRoll, listProfiles, importProfiles, setPrinterColor } from './printers.js';
 import { submitOrder, quote, printableSizes, holdOrder, repeatOrder, retryOrder, releaseOrder, findAwaiting, pollTickets, orderState } from './orders.js';
 import { retryTickets } from './ticket.js';
 import { logEvent, statsSummary, statsCsv } from './stats.js';
@@ -25,6 +26,7 @@ import { runBackup, listBackups, backupStatus, restoreBackup, startBackupSchedul
 import { DEFAULT_SETTINGS } from '../shared/presets.js';
 import { checkGate, assertOpen, sendMailCode, verifyCode, newTotpSecret, totpUri, verifyTotp } from './security.js';
 import QRCode from 'qrcode';
+import sharp from 'sharp';
 import { listOrders, getOrder, deleteOrder, findHeld, storedPhotos, purgeOrders, STATUS_LABEL } from './store.js';
 import { exportTariffs, importTariffs } from './tariffs.js';
 import { testLab, serverFolders, retryPending, startRetryLoop } from './lab.js';
@@ -136,6 +138,8 @@ function registerIpc() {
   handle('admin:save', (pin, next) => {
     checkPin(pin);
     if (next.email && next.email.pass === '••••••') next.email.pass = getSettings().email.pass;
+    // Contadores de papel y color de impresoras: se cambian solo desde sus botones (no los pisa «Guardar»).
+    next.printerCfg = getSettings().printerCfg || {};
     // El secreto del móvil solo se cambia desde «Vincular móvil»; la contraseña SMTP se conserva si viene enmascarada.
     const cur = getSettings().security || {};
     next.security = { ...(next.security || {}), totpSecret: cur.totpSecret || '' };
@@ -460,6 +464,35 @@ function registerIpc() {
   handle('printers:list', () => listPrinters());
   handle('order:quote', (spec) => quote(spec));
   handle('order:printable', () => printableSizes());
+  // Aviso discreto en el inicio: impresoras con poco papel o sin papel (sin más datos).
+  handle('printers:alerts', () => mediaStatus().filter((m) => m.level !== 'ok').map((m) => ({ printer: m.printer, left: m.left, level: m.level })));
+  handle('admin:printerStatus', async (pin) => { checkPin(pin); return { status: mediaStatus(), cfg: getSettings().printerCfg || {}, media: Object.fromEntries(Object.entries(MEDIA).map(([k, v]) => [k, { label: v.label, capacity: v.capacity }])), profiles: await listProfiles() }; });
+  handle('admin:changeRoll', (pin, name, opts) => { checkPin(pin); const r = changeRoll(name, opts); send('settings', publicSettings()); return r; });
+  handle('admin:printerColor', (pin, name, cfg) => { checkPin(pin); return setPrinterColor(name, cfg); });
+  handle('admin:importProfiles', async (pin) => {
+    checkPin(pin);
+    const r = await dialog.showOpenDialog(win, { title: 'Perfiles ICC de las impresoras', properties: ['openFile', 'multiSelections'], filters: [{ name: 'Perfiles de color', extensions: ['icc', 'icm'] }] });
+    if (r.canceled || !r.filePaths.length) return null;
+    return { ...(await importProfiles(r.filePaths)), profiles: await listProfiles() };
+  });
+  // Carta de color 10x15 para comprobar el perfil y las correcciones de una impresora.
+  handle('admin:colorTest', async (pin, printer) => {
+    checkPin(pin);
+    const W = 1205, H = 1795, sw = (x, y, w, h, c) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`;
+    const patches = ['#ff0000', '#00ff00', '#0000ff', '#00ffff', '#ff00ff', '#ffff00', '#000000', '#ffffff', '#c68d6c', '#8a5a44', '#f2d3c2', '#5b7f3a', '#3f6fa8', '#d4b483', '#7a7a7a', '#bdbdbd'];
+    let body = '<defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset="1" stop-color="#fff"/></linearGradient>'
+      + ['#f00', '#0f0', '#00f'].map((c, i) => `<linearGradient id="g${i}" x1="0" x2="1"><stop offset="0" stop-color="#000"/><stop offset=".5" stop-color="${c}"/><stop offset="1" stop-color="#fff"/></linearGradient>`).join('') + '</defs>';
+    body += sw(0, 0, W, H, '#ffffff');
+    patches.forEach((c, i) => { body += sw(60 + (i % 4) * 275, 60 + Math.floor(i / 4) * 230, 255, 210, c); });
+    body += sw(60, 1020, W - 120, 120, 'url(#g)');
+    [0, 1, 2].forEach((i) => { body += sw(60, 1170 + i * 140, W - 120, 120, `url(#g${i})`); });
+    for (let i = 0; i <= 10; i++) body += sw(60 + i * 98, 1610, 90, 90, `rgb(${i * 25.5},${i * 25.5},${i * 25.5})`);
+    body += `<text x="60" y="1760" font-family="Arial" font-size="34" fill="#333">Carta de color · ${String(printer).replace(/[<&>]/g, '')} · ${new Date().toLocaleString('es-ES')}</text>`;
+    const out = dataDir('carta-color.jpg');
+    await saveJpeg(await sharp(Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">${body}</svg>`)).png().toBuffer(), out, 300, true);
+    await enqueuePrint(out, { printer, wMm: 102, hMm: 152, copies: 1, useDriverPaper: false });
+    return true;
+  });
   // Lotes de carné que se pueden imprimir aquí (por su impresora, la de su papel o la del tamaño).
   handle('order:printableLots', () => {
     const s = getSettings();

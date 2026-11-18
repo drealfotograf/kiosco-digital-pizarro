@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Icon, Logo, Modal, TouchField } from '../components/ui.jsx';
 import { api } from '../api.js';
 import { LegalLink } from '../components/Legal.jsx';
@@ -17,7 +17,9 @@ export default function Home({ settings, onStart, onAdmin, onResume, onPinReleas
   const [pinOpen, setPinOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
-  const [lock, setLock] = useState(null); // bloqueo tras 5 PIN erróneos (ajustes / Mi galería)
+  const [lock, setLock] = useState(null);
+  const [paper, setPaper] = useState([]);
+  useEffect(() => { const f = () => api('printers:alerts').then(setPaper).catch(() => {}); f(); const t = setInterval(f, 60_000); return () => clearInterval(t); }, []); // bloqueo tras 5 PIN erróneos (ajustes / Mi galería)
   const [tLock, setTLock] = useState(null); // bloqueo del PIN de caja
 
   const tryPin = async () => {
@@ -42,7 +44,11 @@ export default function Home({ settings, onStart, onAdmin, onResume, onPinReleas
         <div className="top">
           {/* Mi galería: icono discreto, solo para el personal (PIN de seguridad); solo entradas de red elegidas en Ajustes */}
           <button className="staff-btn" onClick={() => { setPinFor('gallery'); setPin(''); setErr(''); setPinOpen(true); }} aria-label="Mi galería (personal)" title="Mi galería"><Icon name="gallery" size={22} /></button>
-          <button className="staff-btn" onClick={() => { setPinFor('admin'); setPin(''); setErr(''); setPinOpen(true); }} aria-label="Ajustes del personal"><Icon name="cog" size={22} /></button>
+          <button className={`staff-btn ${paper.length ? 'alert' : ''}`} onClick={() => { setPinFor('admin'); setPin(''); setErr(''); setPinOpen(true); }} aria-label="Ajustes del personal" title={paper.length ? paper.map((x) => `${x.printer}: ${x.level === 'empty' ? 'sin papel' : `quedan ${x.left}`}`).join(' · ') : undefined}>
+            <Icon name="cog" size={22} />
+            {/* Aviso discreto para el personal: poco papel en alguna impresora */}
+            {paper.length > 0 && <i className={`staff-dot ${paper.some((x) => x.level === 'empty') ? 'empty' : 'low'}`}>{Math.min(...paper.map((x) => x.left))}</i>}
+          </button>
         </div>
         <span className="label">¿Qué quieres hacer?</span>
         {options.map((o) => (

@@ -119,6 +119,8 @@ export const DEFAULT_SETTINGS = {
   idLotTypes: DEFAULT_ID_LOT_TYPES,
   // Impresora de todos los lotes de un papel ('10x15', '15x20'). Cada lote puede tener la suya (lot.printers).
   lotPrinters: { '10x15': [], '15x20': [] },
+  // Por impresora: gestión de color (sRGB o perfil ICC, correcciones) y rollo cargado (contador de papel).
+  printerCfg: {},
   // Impresora simulada para pruebas: los tamaños sin impresora que admite una DNP DS620 se «imprimen» como JPEG en una carpeta.
   simPrinter: { enabled: true, folder: '' },
   // Fotos de los pedidos: se guardan 30 días salvo que el cliente pida que se borren.

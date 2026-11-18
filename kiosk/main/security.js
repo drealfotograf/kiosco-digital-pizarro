@@ -133,3 +133,13 @@ export function verifyCode(gate, method, code) {
   unlock(gate);
   return true;
 }
+
+/** Aviso por correo a la empresa (p. ej. poco papel). Sin correo configurado no hace nada. */
+export async function sendAlertMail(subject, text) {
+  const sec = getSettings().security || {};
+  if (!sec.email || !sec.smtp?.host) return false;
+  const { default: nodemailer } = await import('nodemailer');
+  const tr = nodemailer.createTransport({ host: sec.smtp.host, port: Number(sec.smtp.port) || 587, secure: !!sec.smtp.secure, auth: sec.smtp.user ? { user: sec.smtp.user, pass: sec.smtp.pass } : undefined, connectionTimeout: 10_000 });
+  await tr.sendMail({ from: sec.smtp.from || sec.smtp.user || sec.email, to: sec.email, subject, text });
+  return true;
+}

@@ -4,7 +4,7 @@ import CropEditor, { useBox } from '../components/CropEditor.jsx';
 import ThumbGrid from '../components/ThumbGrid.jsx';
 import LotPreview from '../components/LotPreview.jsx';
 import { ColorSliders } from '../components/ColorTools.jsx';
-import { defaultCropRot, followCrop } from '../../../shared/layout.js';
+import { defaultCropRot, followCrop, lotPaper } from '../../../shared/layout.js';
 import { money, DEFAULT_ID_OPTIONS } from '../../../shared/presets.js';
 import { DEFAULT_ADJUST } from '../../../shared/color.js';
 
@@ -12,7 +12,11 @@ let seq = 0;
 const uid = () => `L${Date.now().toString(36)}${++seq}`;
 
 /** Guías de cara para el tamaño del hueco (se toman de los formatos de carné con esa medida). */
-function faceFor(settings, w, h) {
+/** Guías de cara del lote (van en el propio lote; si no, se buscan por medida en los formatos antiguos). */
+function faceFor(settings, type, big = false) {
+  if (!type || big) return null;
+  if (type.face) return type.face;
+  const w = type.pw, h = type.ph;
   const list = settings.idPresets || [];
   return list.find((p) => p.id === 'eu-pass' && p.w === w && p.h === h) || list.find((p) => p.w === w && p.h === h) || null;
 }
@@ -39,6 +43,9 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
   const opts = { ...DEFAULT_ID_OPTIONS, ...(settings.idOptions || {}) };
   const [curId, setCurId] = useState(() => lots[lots.length - 1]?.uid);
   const [part, setPart] = useState('main'); // 'main' | 'big'
+  // Papel de la hoja: los lotes se agrupan por papel (10x15 y 15x20).
+  const papers = [...new Set(types.map((t) => t.paper || '10x15'))].sort();
+  const [paperSel, setPaperSel] = useState(null);
   const [face, setFace] = useState(opts.faceGuides !== false);
   const [colorOpen, setColorOpen] = useState(false);
   const [busy, setBusy] = useState({});
@@ -62,7 +69,8 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
   const hasBig = type?.kind === 'grid+big' && !type.bigFollows; // con bigFollows la grande copia el encuadre de las pequeñas
   const editBig = hasBig && part === 'big';
   const frame = type ? (editBig ? { w: type.big.w, h: type.big.h } : { w: type.pw, h: type.ph }) : null;
-  const faceGuide = face && !editBig && type ? faceFor(settings, type.pw, type.ph) : null;
+  const faceGuide = face ? faceFor(settings, type, editBig) : null;
+  const paper = paperSel || type?.paper || papers[0] || '10x15';
   const ready = lots.filter((l) => l.rollKey && photoByKey[l.rollKey]);
   const total = lotsTotal(ready, settings);
 
@@ -126,8 +134,13 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
       <div className="idl-body">
         {/* 1. Tipo de lote, con su vista previa */}
         <aside className="idl-types">
-          <h4>1 · Elige el lote</h4>
-          {types.map((t) => (
+          <h4>1 · Elige el papel y el lote</h4>
+          {papers.length > 1 && (
+            <div className="seg mini">
+              {papers.map((p) => <button key={p} className={paper === p ? 'on' : ''} onClick={() => setPaperSel(p)}>Papel {lotPaper({ paper: p }).label}</button>)}
+            </div>
+          )}
+          {types.filter((t) => (t.paper || '10x15') === paper).map((t) => (
             <button key={t.id} className={`idl-type ${cur?.lotId === t.id ? 'on' : ''}`} onClick={() => setCur({ lotId: t.id, crop: null, cropBig: null })}>
               <LotPreview lot={t} photo={cur?.lotId === t.id ? photo : null} entry={cur?.lotId === t.id ? cur : {}} width={236} />
               <span className="row" style={{ justifyContent: 'space-between', width: '100%' }}><b>{t.name}</b><span>{money(t.price, settings.currency)}</span></span>
@@ -145,7 +158,7 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
                 <button className={part === 'big' ? 'on' : ''} onClick={() => setPart('big')}>Foto {type.big.w / 10}x{type.big.h / 10}</button>
               </div>
             )}
-            {!editBig && faceFor(settings, type?.pw, type?.ph) && <button className={`btn sm ${face ? 'primary' : ''}`} onClick={() => setFace(!face)}>Guías de cara</button>}
+            {faceFor(settings, type, editBig) && <button className={`btn sm ${face ? 'primary' : ''}`} onClick={() => setFace(!face)}>Guías de cara</button>}
             <button className={`btn sm ${colorOpen ? 'primary' : ''}`} onClick={() => setColorOpen(!colorOpen)}>Color</button>
             <button className="btn sm" disabled={!photo} onClick={() => setCur(editBig ? { cropBig: null } : { crop: null })}>Centrar</button>
           </div>
@@ -170,7 +183,7 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
 
         {/* 3. Vista previa, opciones, copias y lotes memorizados */}
         <section className="idl-side">
-          <h4>3 · Así quedará tu hoja (10 x 15)</h4>
+          <h4>3 · Así quedará tu hoja ({lotPaper(type).label})</h4>
           <div className="idl-sheet">{type && <LotPreview lot={type} photo={photo} entry={cur} width={400} />}</div>
           <div className="row" style={{ gap: 8 }}>
             {opts.allowGuides && <button className={`chip sm ${cur?.guides ? 'on' : ''}`} onClick={() => setCur({ guides: !cur.guides })}>Guías de corte</button>}

@@ -26,7 +26,7 @@ function orderStat(order, files, status, serverFiles = []) {
   for (const f of serverFiles) server[f.sizeName] = (server[f.sizeName] || 0) + (f.qty || 1);
   return { orderNo: order.orderNo, kind: order.kind, total: order.total, copies: Object.values(sizes).reduce((a, b) => a + b, 0), sizes, amounts, server, status };
 }
-import { frameDims, sheetLayout, packSheets } from '../shared/layout.js';
+import { frameDims, sheetLayout, packSheets, lotPaper } from '../shared/layout.js';
 import { priceFor, sizeOutput } from '../shared/presets.js';
 
 function nextOrderNo() {
@@ -99,7 +99,11 @@ async function renderOrder(spec, photos, outDir, progress) {
   await fsp.mkdir(outDir, { recursive: true });
   const files = [];
   if (spec.kind === 'idlots') {
-    const sheetSize = s.printSizes.find((x) => x.id === '10x15') || s.printSizes.find((x) => Math.abs(x.w - 102) < 2 && Math.abs(x.h - 152) < 2) || { id: '10x15', name: '10 x 15 cm', printers: [] };
+    // Cada lote se imprime en su papel (10x15 o 15x20): se usa el tamaño de copia con esas medidas.
+    const paperSize = (lot) => {
+      const P = lotPaper(lot);
+      return s.printSizes.find((x) => !x.card && x.id === lot.paper) || s.printSizes.find((x) => !x.card && Math.abs(x.w - P.w) < 2 && Math.abs(x.h - P.h) < 2) || { id: lot.paper || '10x15', name: `${P.label} cm`, w: P.w, h: P.h, printers: [] };
+    };
     let i = 0;
     for (const l of spec.lots) {
       i++;
@@ -110,7 +114,12 @@ async function renderOrder(spec, photos, outDir, progress) {
       const { buf } = await renderLotSheet(photo, l, lot, dpi);
       const file = path.join(outDir, `${String(i).padStart(3, '0')}_carnet_${lot.id}.jpg`);
       await saveJpeg(buf, file, dpi, true);
-      files.push({ file, sizeName: `Carnet ${lot.name}`, wMm: 102, hMm: 152, qty: Math.max(1, l.copies | 0), size: sheetSize, lotPrice: Number(lot.price) || 0, original: `${path.basename(photo.name || 'foto', path.extname(photo.name || ''))} ${lot.name}` });
+      const P = lotPaper(lot);
+      // Impresora: la del propio lote; si no, la de todos los lotes de ese papel; si no, la del tamaño de copia.
+      const base = paperSize(lot);
+      const lp = (lot.printers || []).filter(Boolean).length ? lot.printers : (s.lotPrinters?.[lot.paper || '10x15'] || []).filter(Boolean).length ? s.lotPrinters[lot.paper || '10x15'] : null;
+      const size = lp ? { ...base, id: `${base.id}·lote`, printers: lp } : base;
+      files.push({ file, sizeName: `Carnet ${lot.name}`, wMm: P.w, hMm: P.h, qty: Math.max(1, l.copies | 0), size, lotPrice: Number(lot.price) || 0, original: `${path.basename(photo.name || 'foto', path.extname(photo.name || ''))} ${lot.name}` });
     }
     return files;
   }

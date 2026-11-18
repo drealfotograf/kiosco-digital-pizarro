@@ -356,6 +356,16 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
     - Día de la semana con más afluencia e importe por tipo (copias o carnet).
     - El registro de cada pedido guarda ahora el importe y las copias al servidor por tamaño.
   - **Texto del inicio:** «Tus fotos solo se usan para tu pedido. Por seguridad, tu pedido se almacena durante 30 días por si necesitas más copias, salvo que solicites su borrado.»
+  - **Lotes de carnet por papel (schema 6):**
+    - Cada lote indica su papel, `paper` ('10x15' o '15x20', `LOT_PAPERS`), y sus guías de cara, `face`.
+    - Llevan una nota de «uso habitual» que solo ve el personal; el cliente no ve países.
+    - **Lotes nuevos de 10x15:** 9 fotos 3x4, 6 fotos 4x4, 8 fotos 33x48 y 2 fotos 5x7. El lote de 26x32 pasa a 3x4 columnas, porque antes no cabía.
+    - **Lotes nuevos de 15x20:** 15 fotos 35x45, 6 de 5,1x5,1, 18 de 3x4, 12 de 4x4, 15 de 33x48, 6 de 5x7 y 28 de 26x32 (este último desactivado).
+    - La pantalla del cliente agrupa los lotes por papel; cada hoja se imprime en su papel.
+  - **Impresora de los lotes:**
+    - Se elige una para todos los lotes de un papel (`lotPrinters`) y, si se quiere, otra para un lote concreto (`lot.printers`).
+    - Si no se elige ninguna, se usa la del tamaño de copia de ese papel.
+  - **Pestaña «Formatos carnet» eliminada:** las guías de cara van ahora en cada lote.
   - **Pendiente:** unificar el formato del ticket y los códigos con las tarifas de Gestión Pizarro (el cliente dirá dónde están).
   - **Migración de ajustes (schema 5):** añade los lotes nuevos que falten.
   - **Migración de ajustes (schema 4):** las instalaciones existentes reciben las Polaroid y los lotes nuevos, y la Polaroid 10x10 antigua pasa a 8,5x8,5.
@@ -685,3 +695,8 @@ cd kiosk && npm install && npm start
   - Editor de tarifas guardado.
   - Tabla de estadísticas.
 - **Subido a GitHub.**
+- **Lotes de carnet:**
+  - Separados por papel (10x15 y 15x20), con tamaños de otros países (3x4, 4x4, 33x48, 5x7 y 26x32).
+  - Impresora por papel o por lote.
+  - Fuera la pestaña «Formatos carnet».
+  - Probado: lote 15x20 impreso en la impresora de su papel; sin países en la pantalla del cliente.

@@ -756,3 +756,4 @@ h1, h2, h3, .option h2, .topbar h1 { font-family: var(--font-head, inherit); }
 .bk-status.bad { border-left-color: var(--err); }
 .bk-day { min-width: 46px; justify-content: center; }
 .st-total td { font-weight: 600; border-top: 2px solid var(--line); }
+.lot-uso { color: var(--olive); }

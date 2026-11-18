@@ -24,6 +24,7 @@ function entryOf(roll, it) {
 export default function Checkout({ settings, spec, roll = [], orderOpts = {}, onBack, onDone }) {
   const [quote, setQuote] = useState(null);
   const [printable, setPrintable] = useState([]);
+  const [printableLots, setPrintableLots] = useState([]);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [busy, setBusy] = useState('');
@@ -34,7 +35,7 @@ export default function Checkout({ settings, spec, roll = [], orderOpts = {}, on
   const pinNeeded = willNeedPin(spec, settings) && !orderOpts.reprocessOf;
   const d = settings.delivery || { print: true, server: false };
 
-  useEffect(() => { api('order:quote', spec).then(setQuote).catch((e) => setErr(e.message)); api('order:printable').then(setPrintable); }, [spec]);
+  useEffect(() => { api('order:quote', spec).then(setQuote).catch((e) => setErr(e.message)); api('order:printable').then(setPrintable); api('order:printableLots').then(setPrintableLots).catch(() => {}); }, [spec]);
   useEffect(() => on('order-progress', (p) => setBusy(p.text)), []);
 
   const sizes = settings.printSizes;
@@ -55,14 +56,19 @@ export default function Checkout({ settings, spec, roll = [], orderOpts = {}, on
   // Se puede imprimir aquí si todos los tamaños tienen impresora asignada.
   const sheet = settings.sheets.find((s) => s.id === spec.sheetId);
   const sheet10 = sizes.find((x) => x.id === '10x15') || sizes.find((x) => !x.card && Math.abs(x.w - 102) < 2 && Math.abs(x.h - 152) < 2);
-  const neededSizes = spec.kind === 'idlots' ? [sheet10?.id] : spec.kind === 'id'
+  // Lotes de carné: el tamaño de copia de cada papel usado (10x15 y/o 15x20).
+  const lotPaperIds = spec.kind === 'idlots' ? [...new Set(spec.lots.map((l) => settings.idLotTypes.find((t) => t.id === l.lotId)?.paper || '10x15'))]
+    .map((p) => (p === '10x15' ? sheet10?.id : sizes.find((x) => !x.card && (x.id === p || (Math.abs(x.w - 152) < 2 && Math.abs(x.h - 203) < 2)))?.id)) : [];
+  const neededSizes = spec.kind === 'idlots' ? lotPaperIds : spec.kind === 'id'
     ? [sizes.find((x) => sheet && Math.abs(x.w - sheet.w) < 2 && Math.abs(x.h - sheet.h) < 2)?.id]
     : [...new Set(spec.items.map((i) => i.sizeId))];
   // Salida de cada tamaño (su menú en Tamaños, o la general): imprimir aquí, enviar al servidor o las dos.
   const outs = neededSizes.map((id) => sizeOutput(sizes.find((x) => x.id === id), settings));
   const toPrint = neededSizes.filter((id, i) => ['print', 'both'].includes(outs[i]));
   const anyServer = outs.some((o) => o === 'server' || o === 'both');
-  const canPrintHere = toPrint.every((id) => id && printable.includes(id));
+  const canPrintHere = spec.kind === 'idlots'
+    ? toPrint.length > 0 && spec.lots.every((l) => printableLots.includes(l.lotId))
+    : toPrint.every((id) => id && printable.includes(id));
   const labOk = !!(settings.lab?.serverUrl || settings.lab?.folder);
 
   const printHere = toPrint.length > 0 && canPrintHere;

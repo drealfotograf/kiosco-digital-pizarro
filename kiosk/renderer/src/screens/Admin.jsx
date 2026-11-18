@@ -12,7 +12,7 @@ import { QUOTES } from '../components/Quotes.jsx';
 import { sizeColor, DEFAULT_ID_OPTIONS, SIZE_OUTPUTS, sizeOutput, ds620Supports } from '../../../shared/presets.js';
 
 const TABS = [
-  ['orders', 'Pedidos'], ['stats', 'Estadísticas'], ['general', 'General'], ['fonts', 'Letras'], ['print', 'Impresión y envío'], ['sizes', 'Tamaños'], ['printers', 'Impresoras'], ['tariffs', 'Tarifas'], ['lots', 'Lotes de carnet'], ['id', 'Formatos carnet'],
+  ['orders', 'Pedidos'], ['stats', 'Estadísticas'], ['general', 'General'], ['fonts', 'Letras'], ['print', 'Impresión y envío'], ['sizes', 'Tamaños'], ['printers', 'Impresoras'], ['tariffs', 'Tarifas'], ['lots', 'Lotes de carnet'],
   ['sources', 'Fuentes de fotos'], ['lab', 'Laboratorio y galerías'], ['masks', 'Máscaras y eventos'], ['backup', 'Copia de seguridad']
 ];
 
@@ -86,7 +86,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
           {tab === 'lots' && (
             <>
               <h2>Lotes de fotos de carnet</h2>
-              <p className="muted" style={{ margin: 0 }}>Cada lote es una hoja 10x15 con la misma foto. Activa los que se ofrecen en el kiosco, cambia el nombre y el precio por lote. La vista previa muestra cómo se imprime.</p>
+              <p className="muted" style={{ margin: 0 }}>Cada lote es una hoja de 10x15 o de 15x20 con la misma foto. Activa los que se ofrecen en el kiosco, cambia el nombre y el precio por lote. La vista previa muestra cómo se imprime.</p>
               <div className="row">
                 <button className="btn" disabled={dirty} title={dirty ? 'Guarda primero' : ''} onClick={async () => {
                   try { const f = await api('idlots:export', pin); if (f) toast({ type: 'ok', text: `Plantillas exportadas a ${f}` }); } catch (e) { toast({ type: 'error', text: e.message }); }
@@ -102,19 +102,44 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                 }}>Cargar plantillas</button>
                 {dirty && <span className="muted small">Guarda los cambios antes de exportar o cargar</span>}
               </div>
-              <div className="lot-admin">
-                {(s.idLotTypes || []).map((l, i) => (
+              {['10x15', '15x20'].map((paper) => {
+                const lp = s.lotPrinters?.[paper] || [];
+                const label = paper === '15x20' ? '15 x 20' : '10 x 15';
+                return (
+                  <div key={paper} className="col" style={{ gap: 10 }}>
+                    <h3 style={{ margin: '8px 0 0' }}>Papel {label}</h3>
+                    <div className="card col" style={{ gap: 6 }}>
+                      <span className="small"><b>Impresora de todos los lotes {label}</b> <span className="muted">(si no marcas ninguna, la del tamaño de copia {label} en «Impresoras»)</span></span>
+                      <div className="row" style={{ gap: 4 }}>{printers.map((p) => {
+                        const on = lp.includes(p.name);
+                        return <span key={p.name} className={`pchip ${on ? 'on' : ''}`} onClick={() => set('lotPrinters', { ...(s.lotPrinters || {}), [paper]: on ? lp.filter((x) => x !== p.name) : [...lp, p.name] })}>{p.displayName}</span>;
+                      })}</div>
+                    </div>
+                    <div className="lot-admin">
+                      {(s.idLotTypes || []).map((l, i) => ((l.paper || '10x15') !== paper ? null : (
                   <div key={l.id} className={`card col lot-card ${l.enabled === false ? 'off' : ''}`}>
                     <LotPreview lot={l} entry={{ guides: s.idOptions?.guides, border: s.idOptions?.border }} width={300} />
                     <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={l.enabled !== false} onChange={(e) => listEdit('idLotTypes', i, 'enabled', e.target.checked)} style={{ width: 24, height: 24 }} />Ofrecer en el kiosco</label>
                     <input className="inp" value={l.name} onChange={(e) => listEdit('idLotTypes', i, 'name', e.target.value)} />
                     <div className="row" style={{ flexWrap: 'nowrap' }}><span className="muted small" style={{ flex: 1 }}>Código en Gestión</span><input className="inp" style={{ width: 150 }} value={l.code || ''} placeholder={`CARNET-${l.id}`} onChange={(e) => listEdit('idLotTypes', i, 'code', e.target.value.trim())} /></div>
                     <div className="row" style={{ flexWrap: 'nowrap' }}><span className="muted small" style={{ flex: 1 }}>Precio por lote</span><input className="inp" type="number" step="0.5" style={{ width: 110 }} value={l.price} onChange={(e) => listEdit('idLotTypes', i, 'price', Number(e.target.value))} /></div>
+                    {l.uso && <span className="small lot-uso">Uso habitual: {l.uso} <span className="muted">(solo lo ve el personal)</span></span>}
+                    <div className="col" style={{ gap: 4 }}>
+                      <span className="small"><b>Impresora de este lote</b> <span className="muted">(si no marcas ninguna, la de su papel)</span></span>
+                      <div className="row" style={{ gap: 4 }}>{printers.map((p) => {
+                        const on = (l.printers || []).includes(p.name);
+                        return <span key={p.name} className={`pchip ${on ? 'on' : ''}`} onClick={() => listEdit('idLotTypes', i, 'printers', on ? l.printers.filter((x) => x !== p.name) : [...(l.printers || []), p.name])}>{p.displayName}</span>;
+                      })}</div>
+                    </div>
                     <span className="muted small">{l.kind === 'grid+big' ? `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm + 1 de ${l.big.w}x${l.big.h} mm${l.bigFollows ? ' (mismo encuadre)' : ''}` : `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm`} · papel {l.landscape === false ? 'vertical' : 'horizontal'}</span>
                     <button className="btn sm danger" style={{ alignSelf: 'flex-start' }} onClick={() => set('idLotTypes', s.idLotTypes.filter((_, j) => j !== i))}><Icon name="trash" size={16} /> Quitar plantilla</button>
                   </div>
-                ))}
-              </div>
+
+                      )))}
+                    </div>
+                  </div>
+                );
+              })}
               <h2>Opciones para el cliente</h2>
               <div className="form">
                 {(() => { const o = { ...DEFAULT_ID_OPTIONS, ...(s.idOptions || {}) }; const so = (k, v) => set('idOptions', { ...o, [k]: v }); const c = (k, label) => <label className="row" style={{ gap: 8, color: 'var(--ink)' }}><input type="checkbox" checked={!!o[k]} onChange={(e) => so(k, e.target.checked)} style={{ width: 24, height: 24 }} />{label}</label>; return (<>
@@ -247,54 +272,6 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                   })}
                 </tbody>
               </table>
-            </>
-          )}
-
-          {tab === 'id' && (
-            <>
-              <h2>Formatos de foto carnet</h2>
-              <p className="muted" style={{ margin: 0 }}>Cabeza mín./máx.: altura de barbilla a coronilla. Coronilla: distancia desde el borde superior. Precio por hoja.</p>
-              <table className="t">
-                <thead><tr><th>Nombre</th><th>Región</th><th>Ancho</th><th>Alto</th><th>Cabeza mín.</th><th>Cabeza máx.</th><th>Coronilla</th><th>Precio</th><th></th></tr></thead>
-                <tbody>
-                  {s.idPresets.map((p, i) => (
-                    <tr key={i}>
-                      <td><input className="inp" value={p.name} onChange={(e) => listEdit('idPresets', i, 'name', e.target.value)} /></td>
-                      <td style={{ width: 120 }}><input className="inp" value={p.region || ''} onChange={(e) => listEdit('idPresets', i, 'region', e.target.value)} /></td>
-                      {['w', 'h', 'headMin', 'headMax', 'crownMm', 'price'].map((f) => (
-                        <td key={f} style={{ width: 82 }}><input className="inp" type="number" step="0.5" value={p[f]} onChange={(e) => listEdit('idPresets', i, f, Number(e.target.value))} /></td>
-                      ))}
-                      <td><button className="btn sm danger" onClick={() => set('idPresets', s.idPresets.filter((_, j) => j !== i))}><Icon name="trash" size={18} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="row"><button className="btn" onClick={() => set('idPresets', [...s.idPresets, { id: `c${Date.now()}`, name: 'Nuevo formato', region: 'Otros', w: 35, h: 45, headMin: 32, headMax: 36, crownMm: 4, price: 8 }])}><Icon name="plus" /> Añadir formato</button></div>
-              <h2>Hojas para carnet</h2>
-              <table className="t">
-                <thead><tr><th>Nombre</th><th>Ancho mm</th><th>Alto mm</th><th></th></tr></thead>
-                <tbody>
-                  {s.sheets.map((p, i) => (
-                    <tr key={i}>
-                      <td><input className="inp" value={p.name} onChange={(e) => listEdit('sheets', i, 'name', e.target.value)} /></td>
-                      <td><input className="inp" type="number" value={p.w} onChange={(e) => listEdit('sheets', i, 'w', Number(e.target.value))} /></td>
-                      <td><input className="inp" type="number" value={p.h} onChange={(e) => listEdit('sheets', i, 'h', Number(e.target.value))} /></td>
-                      <td><button className="btn sm danger" onClick={() => set('sheets', s.sheets.filter((_, j) => j !== i))}><Icon name="trash" size={18} /></button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div className="row"><button className="btn" onClick={() => set('sheets', [...s.sheets, { id: `h${Date.now()}`, name: 'Nueva hoja', w: 102, h: 152 }])}><Icon name="plus" /> Añadir hoja</button></div>
-              <p className="muted small">Para imprimir hojas de carnet en el kiosco, crea en «Tamaños e impresoras» un tamaño con las mismas medidas que la hoja y asígnale impresora.</p>
-              <div className="form">
-                <label>Separación por defecto (mm)</label>{txt('idDefaults.gapMm', { type: 'number' })}
-                <label>Margen de hoja (mm)</label>{txt('idDefaults.marginMm', { type: 'number' })}
-                <label>Guías de corte</label>
-                <select className="inp" value={s.idDefaults.guides} onChange={(e) => set('idDefaults.guides', e.target.value)}>
-                  <option value="none">Sin guías</option><option value="marks">Marcas de corte</option><option value="lines">Líneas completas</option>
-                </select>
-                <label>Guías de cara</label>{chk('idDefaults.faceGuides', 'Activadas por defecto')}
-              </div>
             </>
           )}
 

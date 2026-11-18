@@ -460,6 +460,13 @@ function registerIpc() {
   handle('printers:list', () => listPrinters());
   handle('order:quote', (spec) => quote(spec));
   handle('order:printable', () => printableSizes());
+  // Lotes de carné que se pueden imprimir aquí (por su impresora, la de su papel o la del tamaño).
+  handle('order:printableLots', () => {
+    const s = getSettings();
+    const sizes = printableSizes();
+    return (s.idLotTypes || []).filter((l) => (l.printers || []).length || (s.lotPrinters?.[l.paper || '10x15'] || []).length
+      || sizes.includes(l.paper || '10x15') || s.printSizes.some((z) => sizes.includes(z.id) && !z.card && Math.abs(Math.min(z.w, z.h) - (l.paper === '15x20' ? 152 : 102)) < 2 && Math.abs(Math.max(z.w, z.h) - (l.paper === '15x20' ? 203 : 152)) < 2)).map((l) => l.id);
+  });
   handle('order:submit', (spec, opts) => submitOrder(spec, (p) => send('order-progress', p), opts || {}));
   handle('order:hold', (spec, customer, code) => holdOrder(spec, customer, code));
   // PIN de caja: el cliente lo introduce en la pantalla final o más tarde desde el inicio.

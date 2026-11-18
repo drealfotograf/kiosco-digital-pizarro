@@ -30,14 +30,36 @@ export const DEFAULT_ID_PRESETS = [
 
 // Lotes de fotos carnet: número de fotos por persona y precio cerrado. presetId vacío = cualquier formato.
 // Lotes de fotos de carné (papel 10x15). Se activan o desactivan en Administración → Fotos carnet.
+// Lotes de carné. paper: hoja de impresión ('10x15' o '15x20'). face: guías de cara (mm: altura de cabeza mín./máx.
+// y distancia de la coronilla al borde). uso: nota solo para el personal (en la pantalla del cliente no salen países).
+const F3545 = { headMin: 32, headMax: 36, crownMm: 4 };
+const F5151 = { headMin: 25, headMax: 35, crownMm: 6 };
+const F3040 = { headMin: 25, headMax: 29, crownMm: 3 };
+const F4040 = { headMin: 26, headMax: 30, crownMm: 4 };
+const F3348 = { headMin: 28, headMax: 33, crownMm: 4 };
+const F5070 = { headMin: 31, headMax: 36, crownMm: 12 };
+const F2632 = { headMin: 22, headMax: 26, crownMm: 2.5 };
 export const DEFAULT_ID_LOT_TYPES = [
-  { id: 'c8', name: '8 fotos 35x45', kind: 'grid', pw: 35, ph: 45, cols: 4, rows: 2, landscape: true, price: 8, enabled: true },
-  { id: 'c4g', name: '4 fotos 35x45 + 1 de 7x10', kind: 'grid+big', pw: 35, ph: 45, cols: 2, rows: 2, big: { w: 70, h: 100 }, landscape: true, price: 9, enabled: true },
+  // ---- Papel 10x15 ----
+  { id: 'c8', name: '8 fotos 35x45', paper: '10x15', kind: 'grid', pw: 35, ph: 45, cols: 4, rows: 2, landscape: true, price: 8, enabled: true, face: F3545, uso: 'España, UE/Schengen, Reino Unido, Australia y la mayoría de países' },
+  { id: 'c4g', name: '4 fotos 35x45 + 1 de 7x10', paper: '10x15', kind: 'grid+big', pw: 35, ph: 45, cols: 2, rows: 2, big: { w: 70, h: 100 }, landscape: true, price: 9, enabled: true, face: F3545, uso: 'Como el anterior, con una foto grande de recuerdo' },
   // 5,1x5,1 cm (2x2"): en 10x15 caben 4 (2 filas exactas de 51 mm, sin separación vertical).
-  { id: 's4', name: '4 fotos 5,1x5,1', kind: 'grid', pw: 51, ph: 51, cols: 2, rows: 2, landscape: true, price: 10, enabled: true },
+  { id: 's4', name: '4 fotos 5,1x5,1', paper: '10x15', kind: 'grid', pw: 51, ph: 51, cols: 2, rows: 2, landscape: true, price: 10, enabled: true, face: F5151, uso: 'EEUU, India y otros países que piden 2x2"' },
   // La 5x7 usa el mismo encuadre que las pequeñas (mismo ancho y misma altura de la cabeza; se alarga hacia abajo).
-  { id: 's4b', name: '4 fotos 5,1x5,1 + 1 de 5x7', kind: 'grid+big', pw: 51, ph: 51, cols: 2, rows: 2, big: { w: 50, h: 70 }, bigFollows: true, landscape: true, price: 11, enabled: true },
-  { id: 'c12', name: '12 fotos 26x32', kind: 'grid', pw: 26, ph: 32, cols: 4, rows: 3, landscape: false, price: 8, enabled: false }
+  { id: 's4b', name: '4 fotos 5,1x5,1 + 1 de 5x7', paper: '10x15', kind: 'grid+big', pw: 51, ph: 51, cols: 2, rows: 2, big: { w: 50, h: 70 }, bigFollows: true, landscape: true, price: 11, enabled: true, face: F5151, uso: 'Como el anterior, con una 5x7 del mismo encuadre' },
+  { id: 'p10-3040', name: '9 fotos 3x4', paper: '10x15', kind: 'grid', pw: 30, ph: 40, cols: 3, rows: 3, landscape: false, price: 8, enabled: true, face: F3040, uso: 'Brasil, Colombia, Rusia, Ucrania y otros (3x4 cm)' },
+  { id: 'p10-4040', name: '6 fotos 4x4', paper: '10x15', kind: 'grid', pw: 40, ph: 40, cols: 3, rows: 2, landscape: true, price: 8, enabled: true, face: F4040, uso: 'Argentina y otros (4x4 cm)' },
+  { id: 'p10-3348', name: '8 fotos 33x48', paper: '10x15', kind: 'grid', pw: 33, ph: 48, cols: 4, rows: 2, landscape: true, price: 9, enabled: true, face: F3348, uso: 'Visado de China' },
+  { id: 'p10-5070', name: '2 fotos 5x7', paper: '10x15', kind: 'grid', pw: 50, ph: 70, cols: 2, rows: 1, landscape: true, price: 9, enabled: true, face: F5070, uso: 'Pasaporte de Canadá' },
+  { id: 'c12', name: '12 fotos 26x32', paper: '10x15', kind: 'grid', pw: 26, ph: 32, cols: 3, rows: 4, landscape: false, price: 8, enabled: false, face: F2632, uso: 'Documentos que piden 26x32 mm' },
+  // ---- Papel 15x20 ----
+  { id: 'p20-3545', name: '15 fotos 35x45', paper: '15x20', kind: 'grid', pw: 35, ph: 45, cols: 5, rows: 3, landscape: true, price: 14, enabled: true, face: F3545, uso: 'España, UE/Schengen, Reino Unido, Australia… (para familias o grupos)' },
+  { id: 'p20-5151', name: '6 fotos 5,1x5,1', paper: '15x20', kind: 'grid', pw: 51, ph: 51, cols: 3, rows: 2, landscape: true, price: 14, enabled: true, face: F5151, uso: 'EEUU, India (2x2")' },
+  { id: 'p20-3040', name: '18 fotos 3x4', paper: '15x20', kind: 'grid', pw: 30, ph: 40, cols: 6, rows: 3, landscape: true, price: 14, enabled: true, face: F3040, uso: 'Brasil, Colombia, Rusia, Ucrania y otros (3x4 cm)' },
+  { id: 'p20-4040', name: '12 fotos 4x4', paper: '15x20', kind: 'grid', pw: 40, ph: 40, cols: 4, rows: 3, landscape: true, price: 14, enabled: true, face: F4040, uso: 'Argentina y otros (4x4 cm)' },
+  { id: 'p20-3348', name: '15 fotos 33x48', paper: '15x20', kind: 'grid', pw: 33, ph: 48, cols: 5, rows: 3, landscape: true, price: 15, enabled: true, face: F3348, uso: 'Visado de China' },
+  { id: 'p20-5070', name: '6 fotos 5x7', paper: '15x20', kind: 'grid', pw: 50, ph: 70, cols: 3, rows: 2, landscape: true, price: 15, enabled: true, face: F5070, uso: 'Pasaporte de Canadá' },
+  { id: 'p20-2632', name: '28 fotos 26x32', paper: '15x20', kind: 'grid', pw: 26, ph: 32, cols: 7, rows: 4, landscape: true, price: 14, enabled: false, face: F2632, uso: 'Documentos que piden 26x32 mm' }
 ];
 export const DEFAULT_ID_OPTIONS = { allowGuides: true, allowBorder: true, guides: true, border: false, faceGuides: true };
 
@@ -78,7 +100,7 @@ export const DEFAULT_SHEETS = [
 ];
 
 export const DEFAULT_SETTINGS = {
-  schema: 5, // = SETTINGS_SCHEMA
+  schema: 6, // = SETTINGS_SCHEMA
   storeName: 'Pizarro',
   // Tamaños que se ven directamente en la zona de selección; el resto, en «Más tamaños».
   quickSizes: ['9x13', '10x15', '13x18', '15x20', '20x30', 'A4'],
@@ -95,6 +117,8 @@ export const DEFAULT_SETTINGS = {
   idDefaults: { sheetId: '10x15', gapMm: 2, marginMm: 3, guides: 'marks', faceGuides: true },
   idLots: DEFAULT_ID_LOTS,
   idLotTypes: DEFAULT_ID_LOT_TYPES,
+  // Impresora de todos los lotes de un papel ('10x15', '15x20'). Cada lote puede tener la suya (lot.printers).
+  lotPrinters: { '10x15': [], '15x20': [] },
   // Impresora simulada para pruebas: los tamaños sin impresora que admite una DNP DS620 se «imprimen» como JPEG en una carpeta.
   simPrinter: { enabled: true, folder: '' },
   // Fotos de los pedidos: se guardan 30 días salvo que el cliente pida que se borren.
@@ -143,7 +167,7 @@ export function sizeColor(sizes, id) {
 }
 
 /** Versión de la estructura de ajustes; al subirla, config.js añade lo nuevo a instalaciones existentes. */
-export const SETTINGS_SCHEMA = 5;
+export const SETTINGS_SCHEMA = 6;
 
 // ---------- Texto y escritura a mano sobre la copia ----------
 // Fuentes de Windows: así la vista previa (Chromium) y la impresión (canvas) usan exactamente la misma letra.

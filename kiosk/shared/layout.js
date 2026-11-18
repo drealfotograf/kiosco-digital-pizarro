@@ -198,8 +198,13 @@ export function fitRect(pw, ph, W, H, angle = 0, fit = DEFAULT_FIT) {
  *  - kind 'grid+big': como 'grid' pero las últimas columnas se sustituyen por una foto grande big {w,h}.
  * Devuelve { sheetW, sheetH, slots:[{x,y,w,h,big}] }.
  */
+/** Papeles de los lotes de carné (en vertical, mm). */
+export const LOT_PAPERS = { '10x15': { w: 102, h: 152, label: '10 x 15' }, '15x20': { w: 152, h: 203, label: '15 x 20' } };
+export const lotPaper = (lot) => LOT_PAPERS[lot?.paper] || LOT_PAPERS['10x15'];
+
 export function lotSlots(lot) {
-  const sheet = lot.landscape === false ? { w: 102, h: 152 } : { w: 152, h: 102 };
+  const P = lotPaper(lot);
+  const sheet = lot.landscape === false ? { w: P.w, h: P.h } : { w: P.h, h: P.w };
   const pw = lot.pw || 35, ph = lot.ph || 45;
   const slots = [];
   if (lot.kind === 'grid+big') {
@@ -268,6 +273,7 @@ export function lotProblem(lot) {
   if (!num(lot.cols, 1, 12) || !num(lot.rows, 1, 12)) return 'filas o columnas no válidas';
   if (lot.kind === 'grid+big' && (!lot.big || !num(lot.big.w, 10, 152) || !num(lot.big.h, 10, 152))) return 'medida de la foto grande no válida';
   const L = lotSlots(lot);
-  if (L.slots.some((q) => q.x < -0.01 || q.y < -0.01 || q.x + q.w > L.sheetW + 0.01 || q.y + q.h > L.sheetH + 0.01)) return 'las fotos no caben en la hoja 10x15';
+  if (lot.paper != null && !LOT_PAPERS[lot.paper]) return 'papel no válido (10x15 o 15x20)';
+  if (L.slots.some((q) => q.x < -0.01 || q.y < -0.01 || q.x + q.w > L.sheetW + 0.01 || q.y + q.h > L.sheetH + 0.01)) return `las fotos no caben en la hoja ${lotPaper(lot).label}`;
   return '';
 }

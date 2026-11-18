@@ -2,6 +2,7 @@ import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { DEFAULT_SETTINGS, DEFAULT_PRINT_SIZES, DEFAULT_ID_LOT_TYPES, SETTINGS_SCHEMA } from '../shared/presets.js';
+import { lotProblem } from '../shared/layout.js';
 
 let settings = null;
 const file = () => path.join(app.getPath('userData'), 'settings.json');
@@ -35,6 +36,13 @@ export function getSettings() {
       if (pq?.card?.win?.w === 100) Object.assign(pq, { name: def.name, card: structuredClone(def.card) });
       // v5: lotes nuevos de carnet (5,1x5,1) que aún no tenga la instalación.
       for (const l of DEFAULT_ID_LOT_TYPES) if (!settings.idLotTypes.some((x) => x.id === l.id)) settings.idLotTypes.push(structuredClone(l));
+      // v6: cada lote indica su papel y sus guías de cara (antes estaban en «Formatos carnet»).
+      settings.idLotTypes = settings.idLotTypes.map((l) => {
+        const d = DEFAULT_ID_LOT_TYPES.find((x) => x.id === l.id);
+        const next = { ...l, paper: l.paper || d?.paper || '10x15', face: l.face || d?.face, uso: l.uso ?? d?.uso };
+        // Un lote que no cabe en su hoja (p. ej. el antiguo 12 fotos 26x32) recibe la distribución de serie.
+        return lotProblem(next) && d ? { ...next, cols: d.cols, rows: d.rows, landscape: d.landscape } : next;
+      });
       settings.schema = SETTINGS_SCHEMA;
       try { saveSettings(settings); } catch { /* se reintentará al guardar */ }
     }

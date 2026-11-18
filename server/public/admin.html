@@ -18,6 +18,7 @@
     <header class="bar"><div class="logo">P</div><h1>Servidor de la tienda</h1><button class="btn" id="out">Salir</button></header>
     <main>
       <div class="tabs">
+        <button data-tab="caja">Caja</button>
         <button data-tab="orders" class="on">Pedidos</button>
         <button data-tab="galleries">Galerías</button>
         <button data-tab="settings">Ajustes</button>
@@ -30,6 +31,16 @@
           <span class="muted small">Se actualiza solo cada 15 s</span>
         </div>
         <table><thead><tr><th>Pedido</th><th>Cliente</th><th>Contenido</th><th>Total</th><th>Estado</th><th></th></tr></thead><tbody id="orders"></tbody></table>
+      </section>
+
+      <section id="tab-caja" hidden>
+        <div class="row" style="margin-bottom:12px">
+          <select id="tfilter"><option value="pendiente">Pendientes de pago</option><option value="pagado">Pagados</option><option value="anulado">Anulados</option><option value="">Todos</option></select>
+          <input id="tsearch" placeholder="Buscar por nº o cliente">
+          <span id="tsum" class="muted small"></span>
+        </div>
+        <p class="muted small" style="margin:0 0 10px">Los tickets pendientes no cuentan en contabilidad hasta que se confirma la venta (aquí o desde Gestión Pizarro). El PIN es el que se da al cliente al cobrar para que imprima en el kiosco.</p>
+        <table><thead><tr><th>Ticket</th><th>Fecha</th><th>Cliente</th><th>Líneas</th><th>Total</th><th>PIN</th><th>Estado</th><th></th></tr></thead><tbody id="tickets"></tbody></table>
       </section>
 
       <section id="tab-galleries" hidden>
@@ -66,6 +77,9 @@
           <label>Clave del kiosco <input id="skey" readonly style="width:100%" class="code"></label>
           <p class="muted small" style="margin:0">Cópiala en el kiosco: Administración → Laboratorio y galerías → Clave del kiosco.</p>
           <div class="row"><button class="btn primary" id="ssave">Guardar</button><button class="btn" id="sregen">Generar nueva clave</button><span id="smsg" class="muted small"></span></div>
+          <label>Clave para Gestión Pizarro <input id="sgkey" readonly style="width:100%" class="code"></label>
+          <p class="muted small" style="margin:0">El programa de gestión la envía en la cabecera <code>x-gestion-key</code> para leer los tickets y confirmar las ventas (ver GESTION-API.md).</p>
+          <div class="row"><button class="btn" id="sgregen">Generar nueva clave de Gestión</button></div>
         </div>
       </section>
     </main>

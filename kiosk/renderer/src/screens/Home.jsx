@@ -2,23 +2,31 @@ import React, { useState } from 'react';
 import { Icon, Logo, Modal, TouchField } from '../components/ui.jsx';
 import { api } from '../api.js';
 import { LegalLink } from '../components/Legal.jsx';
+import PinLock, { parseLock, errorText } from '../components/PinLock.jsx';
 
 /** Inicio con la identidad Pizarro: panel azul con el logotipo y las opciones a la derecha. */
-export default function Home({ settings, onStart, onAdmin, onResume }) {
+export default function Home({ settings, onStart, onAdmin, onResume, onPinRelease, onGallery }) {
+  const [pinFor, setPinFor] = useState('admin'); // 'admin' (ajustes) o 'gallery' (Mi galería, solo personal)
   const [resumeOpen, setResumeOpen] = useState(false);
+  const [payOpen, setPayOpen] = useState(false);
+  const [tNo, setTNo] = useState('');
+  const [tPin, setTPin] = useState('');
+  const [tErr, setTErr] = useState('');
   const [code, setCode] = useState('');
   const [rErr, setRErr] = useState('');
   const [pinOpen, setPinOpen] = useState(false);
   const [pin, setPin] = useState('');
   const [err, setErr] = useState('');
+  const [lock, setLock] = useState(null); // bloqueo tras 5 PIN erróneos (ajustes / Mi galería)
+  const [tLock, setTLock] = useState(null); // bloqueo del PIN de caja
 
   const tryPin = async () => {
-    try { await api('admin:check', pin); setPinOpen(false); onAdmin(pin); } catch { setErr('PIN incorrecto'); setPin(''); }
+    try { await api('admin:check', pin); setPinOpen(false); setLock(null); if (pinFor === 'gallery') onGallery(); else onAdmin(pin); }
+    catch (e) { setPin(''); setLock(parseLock(e.message)); setErr(errorText(e.message)); } // PIN erróneo: se borra lo escrito
   };
   const options = [
     { icon: 'print', title: 'Imprimir fotos', text: 'Desde tu móvil, USB, tarjeta, correo, Bluetooth o PDF.', go: () => onStart('prints') },
     { icon: 'id', title: 'Fotos carnet', text: 'Lotes de fotos 35x45 para DNI, pasaporte y otros documentos.', go: () => onStart('id') },
-    { icon: 'gallery', title: 'Mi galería', text: 'Las fotos de tu sesión o evento, con tu código y contraseña.', go: () => onStart('prints', 'gallery') }
   ];
 
   return (
@@ -26,15 +34,15 @@ export default function Home({ settings, onStart, onAdmin, onResume }) {
       <aside className="brand-panel">
         <div className="brand-center">
           <Logo height={170} color="var(--cream)" />
-          <span className="tag">Impresión fotográfica</span>
-          <h1>Tus recuerdos,<br /><em>impresos hoy.</em></h1>
         </div>
         <span className="foot">Toca una opción para empezar</span>
       </aside>
 
       <main className="home-options">
         <div className="top">
-          <button className="staff-btn" onClick={() => { setPin(''); setErr(''); setPinOpen(true); }} aria-label="Ajustes del personal"><Icon name="cog" size={22} /></button>
+          {/* Mi galería: icono discreto, solo para el personal (PIN de seguridad); solo entradas de red elegidas en Ajustes */}
+          <button className="staff-btn" onClick={() => { setPinFor('gallery'); setPin(''); setErr(''); setPinOpen(true); }} aria-label="Mi galería (personal)" title="Mi galería"><Icon name="gallery" size={22} /></button>
+          <button className="staff-btn" onClick={() => { setPinFor('admin'); setPin(''); setErr(''); setPinOpen(true); }} aria-label="Ajustes del personal"><Icon name="cog" size={22} /></button>
         </div>
         <span className="label">¿Qué quieres hacer?</span>
         {options.map((o) => (
@@ -45,9 +53,24 @@ export default function Home({ settings, onStart, onAdmin, onResume }) {
           </button>
         ))}
         <button className="btn resume" onClick={() => { setCode(''); setRErr(''); setResumeOpen(true); }}><Icon name="list" /> Continuar un pedido guardado</button>
+        {settings.pin?.mode && settings.pin.mode !== 'off' && (
+          <button className="btn resume" onClick={() => { setTNo(''); setTPin(''); setTErr(''); setPayOpen(true); }}><Icon name="print" /> Tengo un PIN de caja</button>
+        )}
         <LegalLink settings={settings} />
       </main>
 
+      {payOpen && (
+        <Modal onClose={() => setPayOpen(false)}>
+          <h2 style={{ margin: 0, fontWeight: 400 }}>Imprimir un pedido pagado</h2>
+          <p className="muted" style={{ margin: 0 }}>Escribe el número de tu ticket y el PIN de 3 cifras que te han dado en caja.</p>
+          <TouchField value={tNo} onChange={(v) => setTNo(v.replace(/\D/g, '').slice(0, 6))} placeholder="Nº de ticket" layout="num" maxLength={6} />
+          <TouchField value={tPin} onChange={(v) => setTPin(v.replace(/\D/g, '').slice(0, 3))} placeholder="PIN" layout="num" secret maxLength={3} />
+          {tLock && <PinLock lock={tLock} onUnlocked={() => { setTLock(null); setTErr(''); }} />}
+          {tErr && !tLock && <div style={{ color: 'var(--err)' }}>{tErr}</div>}
+          <div className="row"><div className="spacer" /><button className="btn" onClick={() => setPayOpen(false)}>Cancelar</button>
+            {!tLock && <button className="btn primary" disabled={!tNo || tPin.length !== 3} onClick={async () => { try { await onPinRelease(tNo, tPin); setPayOpen(false); } catch (e) { setTPin(''); setTLock(parseLock(e.message)); setTErr(errorText(e.message)); } }}>Imprimir</button>}</div>
+        </Modal>
+      )}
       {resumeOpen && (
         <Modal onClose={() => setResumeOpen(false)}>
           <h2 style={{ margin: 0, fontWeight: 400 }}>Continuar un pedido</h2>
@@ -60,11 +83,15 @@ export default function Home({ settings, onStart, onAdmin, onResume }) {
       )}
       {pinOpen && (
         <Modal onClose={() => setPinOpen(false)}>
-          <div className="row"><Logo mark height={52} color="var(--navy)" /><h2 style={{ margin: 0, fontWeight: 400 }}>Ajustes del personal</h2></div>
-          <p className="muted" style={{ margin: 0 }}>Introduce el PIN de administración.</p>
-          <TouchField value={pin} onChange={setPin} placeholder="PIN" layout="num" secret autoFocus maxLength={8} />
-          {err && <div style={{ color: 'var(--err)', fontWeight: 600 }}>{err}</div>}
-          <div className="row"><div className="spacer" /><button className="btn" onClick={() => setPinOpen(false)}>Cancelar</button><button className="btn primary" disabled={!pin} onClick={tryPin}>Entrar</button></div>
+          <div className="row"><Logo mark height={52} color="var(--navy)" /><h2 style={{ margin: 0, fontWeight: 400 }}>{pinFor === 'gallery' ? 'Mi galería' : 'Ajustes del personal'}</h2></div>
+          <p className="muted" style={{ margin: 0 }}>{pinFor === 'gallery' ? 'Solo para el personal. Introduce el PIN de seguridad.' : 'Introduce el PIN de administración.'}</p>
+          {lock
+            ? <PinLock lock={lock} onUnlocked={() => { setLock(null); setErr(''); }} />
+            : <>
+              <TouchField value={pin} onChange={setPin} placeholder="PIN" layout="num" secret autoFocus maxLength={8} />
+              {err && <div style={{ color: 'var(--err)', fontWeight: 600 }}>{err}</div>}
+            </>}
+          <div className="row"><div className="spacer" /><button className="btn" onClick={() => setPinOpen(false)}>Cancelar</button>{!lock && <button className="btn primary" disabled={!pin} onClick={tryPin}>Entrar</button>}</div>
         </Modal>
       )}
     </div>

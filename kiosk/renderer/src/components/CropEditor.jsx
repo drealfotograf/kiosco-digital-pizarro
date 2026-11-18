@@ -27,10 +27,12 @@ const clampFit = (f) => ({ s: Math.min(4, Math.max(0.15, f.s)), dx: Math.min(1, 
  * - Un dedo: mover. Dos dedos: acercar/alejar y girar (enderezar). Rueda: zoom.
  * - mode 'fill': la foto llena la ventana y nunca sale de ella; lo que no se imprime se ve en transparencia.
  * - mode 'fit' : colocación libre (escala y posición) con márgenes del color bg.
+ * Con onModeChange, el zoom es continuo: al alejar por debajo de «llena el formato» pasa sola a márgenes
+ * (fondo bg) y al acercar de nuevo vuelve a recorte, sin tener que activar nada.
  * frame: {w,h} mm de la ventana de la foto. sheet (opcional): { w, h, win:{x,y,w,h}, color } para mostrar
  * el papel completo (borde o Polaroid) con la ventana dentro. overlay: función (W,H) → capa de texto/dibujo.
  */
-export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false }) {
+export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false, onModeChange }) {
   const [boxRef, box] = useBox();
   const fid = 'c' + useId().replace(/[^a-z0-9]/gi, '');
   const aspect = frame.w / frame.h;
@@ -65,12 +67,42 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
   const cx = (c.x + c.w / 2) * pw;
   const cy = (c.y + c.h / 2) * ph;
   const t = angle * RAD;
+  // Zoom unificado: z = 1 cuando la foto llena justo el formato; z < 1 deja márgenes.
+  const kCover = W / (zoomBase * pw);
+  const sContain = fitRect(pw, ph, W, H, angle, DEFAULT_FIT).scale;
+  const ratio = kCover / Math.max(1e-9, sContain); // s de «márgenes» que equivale a llenar
+  const rot = (x, y, a) => [x * Math.cos(a) - y * Math.sin(a), x * Math.sin(a) + y * Math.cos(a)];
+  const zOf = (st) => (st.mode === 'fit' ? st.f.s / ratio : zoomBase / st.c.w);
+  const toFit = (cc, z) => {
+    const kk = kCover * z;
+    const ccx = (cc.x + cc.w / 2) * pw, ccy = (cc.y + cc.h / 2) * ph;
+    const [vx, vy] = rot((pw / 2 - ccx) * kk, (ph / 2 - ccy) * kk, t);
+    return clampFit({ s: z * ratio, dx: vx / W, dy: vy / H });
+  };
+  const toFill = (ff, z) => {
+    const kk = kCover * Math.max(1, z);
+    const [ux, uy] = rot(ff.dx * W, ff.dy * H, -t);
+    const w = W / kk / pw, h = H / kk / ph;
+    return { x: (pw / 2 - ux / kk) / pw - w / 2, y: (ph / 2 - uy / kk) / ph - h / 2, w, h };
+  };
+  /** Aplica un zoom z partiendo del estado st, cambiando de recorte a márgenes (o al revés) si hace falta. */
+  const applyZ = (st, z) => {
+    z = Math.min(4, Math.max(onModeChange ? 0.3 : 1, z));
+    if (!onModeChange) { commit(zoomCrop(st.c, z / (zoomBase / st.c.w))); return; }
+    if (z < 0.999) {
+      if (st.mode === 'fit') commitFit({ ...st.f, s: z * ratio });
+      else onModeChange('fit', { fit: toFit(st.c, z) });
+    } else if (st.mode === 'fit') onModeChange('fill', { crop: clampCropRot(toFill(st.f, z), pw, ph, angle) });
+    else commit(zoomCrop(st.c, z / (zoomBase / st.c.w)));
+  };
+  const live = useRef(null);
+  live.current = { mode, c, f };
 
   const onDown = (e) => {
     if (lockGestures) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    start.current = { crop: c, fit: f, angle, pts: new Map(pointers.current) };
+    start.current = { crop: c, fit: f, angle, mode, z: zOf(live.current), pts: new Map(pointers.current) };
   };
   const onMove = (e) => {
     if (!pointers.current.has(e.pointerId) || !start.current) return;
@@ -86,11 +118,12 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
       const nextAngle = Math.max(-MAX_ANGLE, Math.min(MAX_ANGLE, s0.angle + delta));
       if (onAngle) setAngle(nextAngle);
       const factor = d(pts[0], pts[1]) / Math.max(1, d(p0[0], p0[1]));
-      if (mode === 'fill') commit(zoomCrop(s0.crop, factor), onAngle ? nextAngle : angle);
+      if (onModeChange) applyZ(live.current, s0.z * factor);
+      else if (mode === 'fill') commit(zoomCrop(s0.crop, factor), onAngle ? nextAngle : angle);
       else commitFit({ ...s0.fit, s: s0.fit.s * factor });
     } else if (pts.length === 1 && p0.length === 1) {
       const dx = pts[0].x - p0[0].x, dy = pts[0].y - p0[0].y;
-      if (mode === 'fill') {
+      if (s0.mode === 'fill') {
         const k0 = W / (s0.crop.w * pw);
         const ux = (dx * Math.cos(t) + dy * Math.sin(t)) / k0;
         const uy = (-dx * Math.sin(t) + dy * Math.cos(t)) / k0;
@@ -102,12 +135,13 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
   };
   const onUp = (e) => {
     pointers.current.delete(e.pointerId);
-    start.current = pointers.current.size ? { crop: c, fit: f, angle, pts: new Map(pointers.current) } : null;
+    start.current = pointers.current.size ? { crop: c, fit: f, angle, mode, z: zOf(live.current), pts: new Map(pointers.current) } : null;
   };
   const onWheel = (e) => {
     if (lockGestures) return;
     const z = e.deltaY < 0 ? 1.08 : 1 / 1.08;
-    if (mode === 'fill') commit(zoomCrop(c, z)); else commitFit({ ...f, s: f.s * z });
+    if (onModeChange) applyZ(live.current, zOf(live.current) * z);
+    else if (mode === 'fill') commit(zoomCrop(c, z)); else commitFit({ ...f, s: f.s * z });
   };
   const zoom = zoomBase / c.w;
   const setZoom = (z) => commit(zoomCrop(c, z / zoom));
@@ -151,11 +185,13 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
       {showSlider && (
         <div className="col" style={{ width: Math.max(300, SW), gap: 4 }}>
           <div className="angle-row" style={dark ? null : { color: 'var(--taupe)' }}>
-            <span>{mode === 'fill' ? 'Alejar' : 'Más pequeña'}</span>
-            {mode === 'fill'
+            <span>{onModeChange ? 'Más pequeña' : mode === 'fill' ? 'Alejar' : 'Más pequeña'}</span>
+            {onModeChange
+              ? <input type="range" min="0.3" max="4" step="0.01" value={zOf(live.current)} onChange={(e) => applyZ(live.current, Number(e.target.value))} />
+              : mode === 'fill'
               ? <input type="range" min="1" max="4" step="0.01" value={zoom} onChange={(e) => setZoom(Number(e.target.value))} />
               : <input type="range" min="0.15" max="2.5" step="0.01" value={f.s} onChange={(e) => commitFit({ ...f, s: Number(e.target.value) })} />}
-            <span>{mode === 'fill' ? 'Acercar' : 'Más grande'}</span>
+            <span>{onModeChange ? 'Más grande' : mode === 'fill' ? 'Acercar' : 'Más grande'}</span>
           </div>
           {onAngle && (
             <div className="angle-row" style={dark ? null : { color: 'var(--taupe)' }}>

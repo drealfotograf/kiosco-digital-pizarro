@@ -3,7 +3,7 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { dataDir } from './config.js';
-import { clampCrop, defaultCrop, clampCropRot, rotatedCenter, mmToPx, sheetLayout, cutGuides, fitRect, DEFAULT_FIT, printLayout, lotSlots, slotGuides } from '../shared/layout.js';
+import { clampCrop, defaultCrop, clampCropRot, defaultCropRot, followCrop, rotatedCenter, mmToPx, sheetLayout, cutGuides, fitRect, DEFAULT_FIT, printLayout, lotSlots, slotGuides } from '../shared/layout.js';
 import { renderOverlay } from './overlay.js';
 import { buildMatrix, isIdentity } from '../shared/color.js';
 
@@ -203,7 +203,9 @@ export async function renderLotSheet(photo, entry, lot, dpi) {
   for (const s of L.slots) {
     const key = s.big ? 'big' : 'main';
     if (!cache.has(key)) {
-      const { buf } = await renderPhotoBuffer(photo, { crop: s.big ? entry.cropBig : entry.crop, mode: 'fill', adjust: entry.adjust, angle: entry.angle, wMm: s.w, hMm: s.h, dpi });
+      const main = entry.crop || defaultCropRot(photo.w, photo.h, (lot.pw || 35) / (lot.ph || 45), entry.angle || 0);
+      const crop = !s.big ? main : lot.bigFollows ? followCrop(main, photo.w, photo.h, s.w / s.h, entry.angle || 0) : entry.cropBig;
+      const { buf } = await renderPhotoBuffer(photo, { crop, mode: 'fill', adjust: entry.adjust, angle: entry.angle, wMm: s.w, hMm: s.h, dpi });
       cache.set(key, buf);
     }
     comps.push({ input: cache.get(key), left: mmToPx(s.x, dpi), top: mmToPx(s.y, dpi) });

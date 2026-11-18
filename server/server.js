@@ -275,7 +275,7 @@ app.post('/api/admin/login', rateLimit, (req, res) => {
 });
 const admin = auth('admin');
 
-app.get('/api/admin/config', admin, (req, res) => res.json({ hotFolder: config.hotFolder, storeName: config.storeName, kioskKey: config.kioskKey, shareFolder: shareRoot(), exportRoot: exportRoot() }));
+app.get('/api/admin/config', admin, (req, res) => res.json({ hotFolder: config.hotFolder, storeName: config.storeName, kioskKey: config.kioskKey, gestionKey: gestionKey(), shareFolder: shareRoot(), exportRoot: exportRoot() }));
 app.put('/api/admin/config', admin, (req, res) => {
   if (typeof req.body.hotFolder === 'string') config.hotFolder = req.body.hotFolder.trim();
   if (typeof req.body.exportRoot === 'string' && req.body.exportRoot.trim()) { config.exportRoot = req.body.exportRoot.trim(); fs.mkdirSync(exportRoot(), { recursive: true }); }
@@ -285,11 +285,89 @@ app.put('/api/admin/config', admin, (req, res) => {
   }
   if (typeof req.body.storeName === 'string') config.storeName = req.body.storeName.trim();
   if (req.body.regenerateKioskKey) config.kioskKey = rand(16);
+  if (req.body.regenerateGestionKey) config.gestionKey = rand(16);
   saveConfig();
-  res.json({ ok: true, kioskKey: config.kioskKey });
+  res.json({ ok: true, kioskKey: config.kioskKey, gestionKey: gestionKey() });
 });
 
 app.get('/api/admin/orders', admin, (req, res) => res.json(db.orders));
+
+// ---------- Tickets de caja (pago en caja y contabilidad con Gestión Pizarro) ----------
+// El kiosco envía cada ticket como «pendiente». Gestión Pizarro (o el personal desde esta web) confirma si la venta
+// se realiza («pagado») o no («anulado»). Solo los pagados cuentan en contabilidad.
+const TICKETS = path.join(DATA, 'tickets');
+fs.mkdirSync(TICKETS, { recursive: true });
+const ticketFile = (id) => path.join(TICKETS, `${String(id).replace(/[^\w-]/g, '_')}.json`);
+const readTicket = (id) => { try { return JSON.parse(fs.readFileSync(ticketFile(id), 'utf8')); } catch { return null; } };
+const writeTicket = (t) => { const f = ticketFile(t.numero); fs.writeFileSync(f + '.tmp', JSON.stringify(t, null, 2)); fs.renameSync(f + '.tmp', f); };
+const allTickets = () => fs.readdirSync(TICKETS).filter((f) => f.endsWith('.json')).map((f) => { try { return JSON.parse(fs.readFileSync(path.join(TICKETS, f), 'utf8')); } catch { return null; } }).filter(Boolean)
+  .sort((a, b) => String(b.fecha).localeCompare(String(a.fecha)));
+function gestionKey() { if (!config.gestionKey) { config.gestionKey = rand(16); saveConfig(); } return config.gestionKey; }
+gestionKey(); // se crea al arrancar para que la web la muestre y Gestión pueda usarla
+function gestionOnly(req, res, next) { if (!eq(req.headers['x-gestion-key'] || '', gestionKey())) return res.status(401).json({ ok: false, error: 'Clave de Gestión incorrecta' }); next(); }
+const num = (v) => (Number.isFinite(Number(v)) ? Math.round(Number(v) * 100) / 100 : 0);
+function cleanTicket(b) {
+  if (!b || typeof b.numero !== 'string' || !/^[\w-]{1,40}$/.test(b.numero)) return null;
+  const lineas = (Array.isArray(b.lineas) ? b.lineas : []).slice(0, 200).map((l) => ({
+    codigo: String(l.codigo || '').slice(0, 40), descripcion: String(l.descripcion || '').slice(0, 120), cantidad: Math.max(0, Math.round(Number(l.cantidad) || 0)), precio: num(l.precio), importe: num(l.importe)
+  }));
+  return {
+    numero: b.numero, corto: String(b.corto || '').slice(0, 12), fecha: String(b.fecha || new Date().toISOString()).slice(0, 40),
+    tienda: String(b.tienda || '').slice(0, 80), kiosco: String(b.kiosco || '').slice(0, 40),
+    cliente: { name: String(b.cliente?.name || '').slice(0, 80), phone: String(b.cliente?.phone || '').slice(0, 20) },
+    lineas, total: num(b.total), moneda: String(b.moneda || 'EUR').slice(0, 3),
+    iva: { porcentaje: num(b.iva?.porcentaje), base: num(b.iva?.base), cuota: num(b.iva?.cuota) },
+    requierePin: !!b.requierePin, pin: /^\d{3}$/.test(String(b.pin || '')) ? String(b.pin) : undefined
+  };
+}
+function setEstado(t, estado, por, referencia) {
+  t.estado = estado; t.confirmadoEn = new Date().toISOString(); t.confirmadoPor = por;
+  if (referencia) t.referencia = String(referencia).slice(0, 60);
+  writeTicket(t);
+  return t;
+}
+
+// Kiosco: alta del ticket (no se pisa uno ya confirmado) y consulta de su estado.
+app.post('/api/tickets', kioskOnly, (req, res) => {
+  const t = cleanTicket(req.body);
+  if (!t) return res.status(400).json({ ok: false, error: 'Ticket no válido' });
+  const prev = readTicket(t.numero);
+  if (prev && prev.estado !== 'pendiente') return res.json({ ok: true, estado: prev.estado });
+  writeTicket({ ...t, estado: 'pendiente', recibido: prev?.recibido || new Date().toISOString() });
+  res.json({ ok: true, estado: 'pendiente' });
+});
+app.get('/api/tickets/:id', kioskOnly, (req, res) => {
+  const t = readTicket(req.params.id);
+  if (!t) return res.status(404).json({ ok: false, error: 'Ticket no encontrado' });
+  res.json({ ok: true, estado: t.estado });
+});
+
+// Gestión Pizarro: lista de tickets (por estado) y confirmación de la venta. Ver GESTION-API.md.
+app.get('/api/gestion/tickets', gestionOnly, (req, res) => {
+  const e = String(req.query.estado || '');
+  res.json(allTickets().filter((t) => !e || t.estado === e));
+});
+app.get('/api/gestion/tickets/:id', gestionOnly, (req, res) => {
+  const t = readTicket(req.params.id);
+  t ? res.json(t) : res.status(404).json({ ok: false, error: 'Ticket no encontrado' });
+});
+app.post('/api/gestion/tickets/:id', gestionOnly, (req, res) => {
+  const t = readTicket(req.params.id);
+  if (!t) return res.status(404).json({ ok: false, error: 'Ticket no encontrado' });
+  if (typeof req.body.venta !== 'boolean') return res.status(400).json({ ok: false, error: 'Indica venta: true (realizada) o false (anulada)' });
+  if (t.estado !== 'pendiente') return res.status(409).json({ ok: false, error: `El ticket ya está ${t.estado}`, estado: t.estado });
+  res.json({ ok: true, ticket: setEstado(t, req.body.venta ? 'pagado' : 'anulado', 'gestion', req.body.referencia) });
+});
+
+// Web de administración: lo mismo a mano mientras Gestión no esté conectado.
+app.get('/api/admin/tickets', admin, (req, res) => res.json(allTickets()));
+app.post('/api/admin/tickets/:id', admin, (req, res) => {
+  const t = readTicket(req.params.id);
+  if (!t) return res.status(404).json({ ok: false, error: 'Ticket no encontrado' });
+  if (!['pagado', 'anulado'].includes(req.body.estado)) return res.status(400).json({ ok: false, error: 'Estado no válido' });
+  if (t.estado !== 'pendiente') return res.status(409).json({ ok: false, error: `El ticket ya está ${t.estado}` });
+  res.json({ ok: true, ticket: setEstado(t, req.body.estado, 'personal') });
+});
 app.patch('/api/admin/orders/:id', admin, async (req, res) => {
   const o = db.orders.find((x) => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'No existe' });

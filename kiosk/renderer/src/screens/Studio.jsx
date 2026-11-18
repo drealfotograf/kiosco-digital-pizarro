@@ -140,7 +140,10 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
         if (own.length) n++;
       }
     }
-    toast({ type: 'ok', text: selSize ? `${n} foto(s): ${selQty} copia(s) de ${sizeById(selSize).name}` : `${n} foto(s) con ${selQty} copia(s) en sus tamaños` });
+    // 0 copias quita ese tamaño (o todos sus tamaños) de las fotos seleccionadas.
+    toast({ type: 'ok', text: selQty === 0
+      ? (selSize ? `${n} foto(s): quitado ${sizeById(selSize).name}` : `${n} foto(s) quitadas del pedido`)
+      : selSize ? `${n} foto(s): ${selQty} copia(s) de ${sizeById(selSize).name}` : `${n} foto(s) con ${selQty} copia(s) en sus tamaños` });
     endSelect();
   };
   const removeSelection = () => { setItems((l) => l.filter((i) => !sel.has(i.rollKey))); toast({ type: 'ok', text: 'Fotos quitadas del pedido' }); endSelect(); };
@@ -236,6 +239,11 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
               mode={ed.mode} bg={ed.bg} adjust={ed.adjust} mask={maskPath(ed.mask)}
               maxW={Math.max(200, stage.w - 150)} maxH={Math.max(200, stage.h - 40)}
               lockGestures={!!tool}
+              onModeChange={(m, p) => setEdit(focusKey, {
+                mode: m,
+                ...(p.fit ? { fits: { ...ed.fits, [curSize.id]: p.fit } } : {}),
+                ...(p.crop ? { crops: { ...ed.crops, [curSize.id]: p.crop } } : {})
+              })}
               overlay={(w, h) => (
                 <OverlayLayer W={w} H={h} overlay={ed.overlay} onChange={setOverlay} tool={tool} pen={pen}
                   selected={selText} onSelect={setSelText}
@@ -284,7 +292,7 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
             </section>
             <section className="ob-sec">
               <h4>Copias</h4>
-              <Stepper value={selQty} onChange={setSelQty} />
+              <Stepper value={selQty} min={0} onChange={setSelQty} />
             </section>
             <section className="ob-sec ob-end">
               <button className="btn primary lg" disabled={!sel.size} onClick={applySelection}><Icon name="check" /> Aplicar a {sel.size}</button>
@@ -294,43 +302,42 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
         ) : photo ? (
           <>
             <section className="ob-sec ob-size-sec">
-              <h4>Tamaño</h4>
+              <h4>Tamaño {q && <span className={`q-inline ${q.level}`}>{q.label.split(':')[0]} · {q.dpi} ppp{!q.ok && rec && rec.id !== curSize.id && <button className="link" onClick={() => tapSize(rec.id)}>Mejor {short(rec)}</button>}</span>}</h4>
               {sizeGrid(curSize.id, tapSize, true)}
               <div className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
                 {qtyOf(focusKey, curSize.id) === 0
                   ? <button className="btn primary sm grow" onClick={() => setQty(focusKey, photo.id, curSize.id, 1)}><Icon name="plus" size={16} /> Añadir {short(curSize)}</button>
                   : <><span className="small grow">Copias <b>{short(curSize)}</b></span><Stepper value={qtyOf(focusKey, curSize.id)} min={0} onChange={(v) => setQty(focusKey, photo.id, curSize.id, v)} /></>}
               </div>
-              {q && <div className={`quality mini ${q.level}`}><span><b>{q.label.split(':')[0]}</b> · {q.dpi} ppp</span>{!q.ok && rec && rec.id !== curSize.id && <button className="link" onClick={() => tapSize(rec.id)}>Mejor {short(rec)}</button>}</div>}
             </section>
 
-            <section className="ob-sec" style={{ width: 250 }}>
+            <section className="ob-sec" style={{ width: 270 }}>
               <h4>Encuadre</h4>
               <div className="seg mini">
                 <button className={ed.mode === 'fill' ? 'on' : ''} onClick={() => setEdit(focusKey, { mode: 'fill' })}>Recortar</button>
-                <button className={ed.mode === 'fit' ? 'on' : ''} onClick={() => setEdit(focusKey, { mode: 'fit' })}>Ajustar con fondo</button>
+                <button className={ed.mode === 'fit' ? 'on' : ''} onClick={() => setEdit(focusKey, { mode: 'fit' })}>Foto entera</button>
               </div>
-              {ed.mode === 'fit' && (
-                <div className="row" style={{ gap: 5 }}>
-                  {SWATCHES.map((c) => <button key={c} className={`swatch mini ${ed.bg === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setEdit(focusKey, { bg: c })} aria-label={c} />)}
-                  <label className="swatch mini custom" title="Otro color"><input type="color" value={ed.bg} onChange={(e) => setEdit(focusKey, { bg: e.target.value })} />+</label>
-                </div>
-              )}
-              {!curSize.card && (
-                <label className="row small" style={{ gap: 8 }}>
-                  <input type="checkbox" checked={ed.border} onChange={(e) => setEdit(focusKey, { border: e.target.checked, borderMm: ed.borderMm || settings.defaultBorderMm || 5 })} style={{ width: 22, height: 22 }} />
-                  Borde blanco de {ed.borderMm || 5} mm
-                  {ed.border && <><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.max(1, (ed.borderMm || 5) - 1) })}>−</button><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.min(20, (ed.borderMm || 5) + 1) })}>+</button></>}
-                </label>
-              )}
-              <div className="row" style={{ gap: 5 }}>
-                {!curSize.card && <button className="btn sm" onClick={() => setEdit(focusKey, { land: { ...ed.land, [curSize.id]: !landOf(ed, curSize, photo) }, crops: { ...ed.crops, [curSize.id]: null } })}><Icon name="rotate" size={16} /> Girar</button>}
+              <div className="row" style={{ gap: 5, flexWrap: 'nowrap', opacity: ed.mode === 'fit' ? 1 : 0.55 }} title="Color de los márgenes al reducir la foto">
+                {SWATCHES.map((c) => <button key={c} className={`swatch tiny ${ed.bg === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setEdit(focusKey, { bg: c })} aria-label={c} />)}
+                <label className="swatch tiny custom" title="Otro color"><input type="color" value={ed.bg} onChange={(e) => setEdit(focusKey, { bg: e.target.value })} />+</label>
+              </div>
+              <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                {!curSize.card && (
+                  <label className="row small" style={{ gap: 6, flexWrap: 'nowrap' }}>
+                    <input type="checkbox" checked={ed.border} onChange={(e) => setEdit(focusKey, { border: e.target.checked, borderMm: ed.borderMm || settings.defaultBorderMm || 5 })} style={{ width: 20, height: 20 }} />
+                    Borde {ed.borderMm || 5} mm
+                  </label>
+                )}
+                {!curSize.card && ed.border && <><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.max(1, (ed.borderMm || 5) - 1) })}>−</button><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.min(20, (ed.borderMm || 5) + 1) })}>+</button></>}
+              </div>
+              <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                {!curSize.card && <button className="btn sm" onClick={() => setEdit(focusKey, { land: { ...ed.land, [curSize.id]: !landOf(ed, curSize, photo) }, crops: { ...ed.crops, [curSize.id]: null } })}>Girar</button>}
                 <button className="btn sm" onClick={() => setEdit(focusKey, { crops: { ...ed.crops, [curSize.id]: null }, fits: { ...ed.fits, [curSize.id]: null } })}>Centrar</button>
-                <button className="btn sm" onClick={() => { setEdits((all) => { const n = { ...all }; delete n[focusKey]; return n; }); toast({ type: 'ok', text: 'Foto restaurada a su estado original' }); }}><Icon name="rotate" size={16} /> Restaurar</button>
+                <button className="btn sm" onClick={() => { setEdits((all) => { const n = { ...all }; delete n[focusKey]; return n; }); toast({ type: 'ok', text: 'Foto restaurada a su estado original' }); }}><Icon name="rotate" size={14} /> Restaurar</button>
               </div>
             </section>
 
-            <section className="ob-sec" style={{ width: 250 }}>
+            <section className="ob-sec ob-filters" style={{ width: 330 }}>
               <h4>Filtro</h4>
               <FilterGrid src={entry.thumb} adjust={ed.adjust} onChange={(a) => setEdit(focusKey, { adjust: a })} compact />
             </section>
@@ -340,38 +347,37 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
               <ColorSliders adjust={ed.adjust} onChange={(a) => setEdit(focusKey, { adjust: a })} compact />
             </section>
 
-            <section className="ob-sec" style={{ width: 180 }}>
-              <h4>Texto y escritura</h4>
-              <div className="row" style={{ gap: 5 }}>
+            <section className="ob-sec" style={{ width: 200 }}>
+              <h4>Más {!tool && (ed.overlay.texts?.length || ed.overlay.strokes?.length) ? <button className="link" onClick={() => setOverlay({ texts: [], strokes: [] })}>Quitar texto</button> : null}</h4>
+              <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
                 <button className={`btn sm ${tool === 'text' ? 'primary' : ''}`} onClick={() => { setTool(tool === 'text' ? null : 'text'); setSelText(null); }}>Aa Texto</button>
                 <button className={`btn sm ${tool === 'draw' ? 'primary' : ''}`} onClick={() => setTool(tool === 'draw' ? null : 'draw')}>✎ A mano</button>
               </div>
               {tool === 'draw' && (
-                <div className="row" style={{ gap: 4 }}>
-                  {OVERLAY_COLORS.slice(0, 5).map((c) => <button key={c} className={`swatch mini ${pen.color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setPen({ ...pen, color: c })} />)}
+                <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                  {OVERLAY_COLORS.slice(0, 4).map((c) => <button key={c} className={`swatch tiny ${pen.color === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setPen({ ...pen, color: c })} />)}
                   <button className="btn sm" disabled={!ed.overlay.strokes?.length} onClick={() => setOverlay({ ...ed.overlay, strokes: ed.overlay.strokes.slice(0, -1) })}>Deshacer</button>
                 </div>
               )}
               {tool === 'text' && (
-                <div className="row" style={{ gap: 4 }}>
+                <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
                   <button className="btn sm" onClick={() => setTextDraft({ pos: defaultTextPos, value: '' })}>+ Añadir</button>
                   {selTextObj && <button className="btn sm" onClick={() => { setTextStyle({ font: selTextObj.font, color: selTextObj.color, size: selTextObj.size }); setTextDraft({ pos: [selTextObj.x, selTextObj.y], value: selTextObj.text, editId: selTextObj.id }); }}>Editar</button>}
                   {selTextObj && <button className="btn sm danger" onClick={() => { setOverlay({ ...ed.overlay, texts: ed.overlay.texts.filter((t) => t.id !== selText) }); setSelText(null); }}>Borrar</button>}
                 </div>
               )}
-              {!tool && (ed.overlay.texts?.length || ed.overlay.strokes?.length) ? <button className="link" onClick={() => setOverlay({ texts: [], strokes: [] })}>Quitar texto y dibujo</button> : null}
-            </section>
-
-            <section className="ob-sec" style={{ width: 150 }}>
-              <h4>Más</h4>
-              {masks.length > 0 && (
+              {!tool && masks.length > 0 && (
                 <select className="sel mini" value={ed.mask} onChange={(e) => setEdit(focusKey, { mask: e.target.value })}>
                   <option value="">Sin marco</option>
                   {masks.map((m) => <option key={m.name} value={m.name}>{m.name.replace(/\.png$/i, '')}</option>)}
                 </select>
               )}
-              <button className="btn sm" onClick={() => onVirtualCopy(entry)}><Icon name="copy" size={16} /> Copia virtual</button>
-              {entry.virtualOf && <button className="btn sm danger" onClick={() => onRemoveVirtual(entry)}><Icon name="trash" size={16} /> Quitar copia</button>}
+              {!tool && (
+                <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
+                  <button className="btn sm" onClick={() => onVirtualCopy(entry)}><Icon name="copy" size={14} /> Copia virtual</button>
+                  {entry.virtualOf && <button className="btn sm icon danger" onClick={() => onRemoveVirtual(entry)} aria-label="Quitar copia virtual"><Icon name="trash" size={14} /></button>}
+                </div>
+              )}
             </section>
           </>
         ) : (

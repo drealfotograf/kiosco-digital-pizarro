@@ -18,11 +18,28 @@ const SOURCES = [
  * Elegir el origen de las fotos. Al elegirlo se cargan todos sus archivos (con vista previa de baja calidad)
  * y se pasa a la zona de selección. onLoad(files, origin) → número de fotos añadidas.
  */
-export default function Sources({ session, settings, flow, roll, initial = 'usb', onLoad, onBack, onNext, backLabel = 'Cancelar' }) {
+/**
+ * Entradas de red de «Mi galería» (solo personal), elegidas en Ajustes: 'gallery' (galerías del servidor),
+ * 'server' (carpeta del servidor) y 'share:<ruta>' (cada carpeta de red). Devuelve los ids de fuente visibles.
+ */
+export function galleryNetSources(settings) {
+  const g = settings.galleryNet || ['gallery', 'server'];
+  const ids = [];
+  if (g.includes('gallery') && settings.lab?.serverUrl) ids.push('gallery');
+  if (g.includes('server') && settings.lab?.serverUrl) ids.push('server');
+  if (g.some((x) => x.startsWith('share:') && (settings.shareFolders || []).some((f) => `share:${f.path}` === x))) ids.push('share');
+  return ids;
+}
+
+export default function Sources({ session, settings, flow, roll, initial = 'usb', only = null, onLoad, onBack, onNext, backLabel = 'Cancelar' }) {
   const [src, setSrc] = useState(initial);
   const [loading, setLoading] = useState('');
   const shares = settings.shareFolders || [];
-  const visible = SOURCES.filter((s) => (s.id !== 'share' || shares.length) && (s.id !== 'email' || settings.email.enabled) && (s.id !== 'server' || settings.lab.serverUrl));
+  // Con «only» (Mi galería) solo se ven esas entradas de red; si no, todas menos la galería, que es solo del personal.
+  const visible = only
+    ? SOURCES.filter((s) => only.includes(s.id))
+    : SOURCES.filter((s) => s.id !== 'gallery' && (s.id !== 'share' || shares.length) && (s.id !== 'email' || settings.email.enabled) && (s.id !== 'server' || settings.lab.serverUrl));
+  const allowedShares = only ? (settings.galleryNet || []).filter((x) => x.startsWith('share:')).map((x) => x.slice(6)) : null;
 
   const load = async (getFiles, origin) => {
     setLoading('Buscando fotos…');
@@ -39,7 +56,7 @@ export default function Sources({ session, settings, flow, roll, initial = 'usb'
     <div className="screen">
       <div className="topbar">
         <button className="btn" onClick={onBack}><Icon name="back" /> {backLabel}</button>
-        <h1>{flow === 'id' ? 'Fotos carnet · ¿De dónde sacamos la foto?' : '¿Dónde están tus fotos?'}</h1>
+        <h1>{only ? 'Mi galería · entradas de red' : flow === 'id' ? 'Fotos carnet · ¿De dónde sacamos la foto?' : '¿Dónde están tus fotos?'}</h1>
       </div>
       <div className="content" style={{ overflow: 'hidden' }}>
         <div className="sources">
@@ -57,7 +74,7 @@ export default function Sources({ session, settings, flow, roll, initial = 'usb'
             {src === 'bt' && <BluetoothPanel load={load} />}
             {src === 'email' && <EmailPanel session={session} roll={roll} onNext={onNext} />}
             {src === 'server' && <ServerPanel load={load} />}
-            {src === 'share' && <SharePanel load={load} />}
+            {src === 'share' && <SharePanel load={load} allowed={allowedShares} />}
             {src === 'gallery' && <GalleryPanel load={load} />}
           </div>
         </div>
@@ -280,10 +297,10 @@ function EmailPanel({ session, roll, onNext }) {
   );
 }
 
-function SharePanel({ load }) {
+function SharePanel({ load, allowed = null }) {
   const [list, setList] = useState([]);
   const [open, setOpen] = useState(null);
-  useEffect(() => { api('share:list').then(setList); }, []);
+  useEffect(() => { api('share:list').then((l) => setList(allowed ? l.filter((f) => allowed.includes(f.path)) : l)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (open) return (<><div className="row"><button className="btn sm" onClick={() => setOpen(null)}><Icon name="back" size={20} /> Carpetas</button><h2>{open.name}</h2></div><FolderNav root={open.path} rootLabel={open.name} origin="Carpeta de red" load={load} /></>);
   return (
     <>

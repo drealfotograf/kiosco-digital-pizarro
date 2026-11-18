@@ -5,7 +5,7 @@ import { money } from '../../../shared/presets.js';
 import { FILTERS } from '../../../shared/color.js';
 
 const TABS = [
-  ['held', 'Sin terminar'], ['sent', 'Enviados'], ['printed', 'Impresos'], ['error', 'Con error']
+  ['awaiting', 'Pendientes de pago'], ['held', 'Sin terminar'], ['sent', 'Enviados'], ['printed', 'Impresos'], ['error', 'Con error'], ['cancelled', 'Anulados']
 ];
 const fmtDate = (d) => new Date(d).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit', hour: '2-digit', minute: '2-digit' });
 
@@ -62,6 +62,7 @@ export default function AdminOrders({ pin, settings, toast, onReprocess }) {
         <OrderDetail order={detail} settings={settings} onClose={() => setDetail(null)}
           onDelete={() => run('Eliminando…', async () => { await api('orders:delete', pin, detail.orderNo); setDetail(null); toast({ type: 'ok', text: 'Pedido eliminado' }); })}
           onRepeat={(idx, dest) => run('Repitiendo pedido…', async () => { const r = await api('orders:repeat', pin, detail.orderNo, idx, dest); setDetail(null); toast({ type: 'ok', text: `Nuevo pedido ${r.orderNo} ${dest === 'print' ? 'impreso' : 'enviado'}` }); })}
+          onRelease={() => run('Imprimiendo…', async () => { await api('orders:release', pin, detail.orderNo); setDetail(null); toast({ type: 'ok', text: 'Pedido liberado e impreso' }); })}
           onRetry={() => run('Reintentando…', async () => { await api('orders:retry', pin, detail.orderNo); setDetail(null); toast({ type: 'ok', text: 'Pedido completado' }); })}
           onReprocess={() => run('Abriendo pedido…', async () => onReprocess(await api('orders:reprocess', pin, detail.orderNo)))} />
       )}
@@ -70,7 +71,7 @@ export default function AdminOrders({ pin, settings, toast, onReprocess }) {
   );
 }
 
-function OrderDetail({ order, settings, onClose, onDelete, onRepeat, onRetry, onReprocess }) {
+function OrderDetail({ order, settings, onClose, onDelete, onRepeat, onRetry, onReprocess, onRelease }) {
   const lines = order.kind === 'id' ? order.spec.people : order.spec.items;
   const [sel, setSel] = useState(() => new Set(lines.map((_, i) => i)));
   const [confirmDel, setConfirmDel] = useState(false);
@@ -85,7 +86,7 @@ function OrderDetail({ order, settings, onClose, onDelete, onRepeat, onRetry, on
     <Modal onClose={onClose}>
       <div className="row">
         <h2 style={{ margin: 0, flex: 1 }}>{held ? `Pedido sin terminar · código ${order.code}` : `Pedido ${order.orderNo}`}</h2>
-        <span className={`status-pill ${order.status}`}>{({ held: 'Sin terminar', sent: 'Enviado', printed: 'Impreso', error: 'Con error', processing: 'Procesando' })[order.status]}</span>
+        <span className={`status-pill ${order.status}`}>{({ held: 'Sin terminar', awaiting: 'Pendiente de pago', sent: 'Enviado', printed: 'Impreso', error: 'Con error', processing: 'Procesando', cancelled: 'Anulado' })[order.status]}</span>
         <button className="btn sm" onClick={onClose}><Icon name="close" size={18} /></button>
       </div>
       <div className="small muted">
@@ -94,6 +95,13 @@ function OrderDetail({ order, settings, onClose, onDelete, onRepeat, onRetry, on
         {order.kind === 'id' && ` · ${preset?.name || order.spec.presetId}`}
       </div>
       {order.error && <div className="card" style={{ color: 'var(--err)' }}>⚠ {order.error}</div>}
+      {order.status === 'awaiting' && (
+        <div className="card row" style={{ justifyContent: 'space-between' }}>
+          <span>Pendiente de pago en caja. PIN para el cliente: <b className="mono" style={{ fontSize: 26, letterSpacing: 4 }}>{order.pin}</b>{order.pinTries ? <span className="small muted"> · {order.pinTries} intento(s) fallido(s)</span> : null}</span>
+          <button className="btn primary" onClick={onRelease}><Icon name="print" size={20} /> Cobrado: liberar e imprimir</button>
+        </div>
+      )}
+      {order.photosDeleted && <div className="small muted">El cliente pidió no guardar sus fotos: se borraron al entregar el pedido. Solo queda el registro.</div>}
       <div className="detail-list">
         {lines.map((l, i) => (
           <label key={i} className={`detail-row ${sel.has(i) ? 'on' : ''}`}>

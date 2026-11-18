@@ -247,3 +247,27 @@ export function slotGuides(slots, len = 3, gap = 0.6) {
   }
   return lines;
 }
+
+/**
+ * Encuadre «que sigue» al de las fotos pequeñas para un hueco de otra proporción:
+ * mismo centro horizontal, mismo ancho en la foto (la cara sale del mismo tamaño relativo) y mismo borde superior;
+ * la diferencia de alto se añade por abajo. aspect = ancho / alto del hueco nuevo.
+ */
+export function followCrop(crop, pw, ph, aspect, angle = 0) {
+  const w = crop.w * pw, h = w / aspect;
+  const cx = (crop.x + crop.w / 2) * pw, top = crop.y * ph;
+  return clampCropRot({ x: (cx - w / 2) / pw, y: top / ph, w: w / pw, h: h / ph }, pw, ph, angle);
+}
+
+/** Comprueba que una plantilla de lote cabe en su hoja 10x15. Devuelve un texto de error o ''. */
+export function lotProblem(lot) {
+  const num = (v, a, b) => Number.isFinite(Number(v)) && Number(v) >= a && Number(v) <= b;
+  if (!lot || typeof lot.id !== 'string' || !lot.id.trim()) return 'falta el identificador';
+  if (!['grid', 'grid+big'].includes(lot.kind)) return 'tipo desconocido';
+  if (!num(lot.pw, 10, 152) || !num(lot.ph, 10, 152)) return 'medida de foto no válida';
+  if (!num(lot.cols, 1, 12) || !num(lot.rows, 1, 12)) return 'filas o columnas no válidas';
+  if (lot.kind === 'grid+big' && (!lot.big || !num(lot.big.w, 10, 152) || !num(lot.big.h, 10, 152))) return 'medida de la foto grande no válida';
+  const L = lotSlots(lot);
+  if (L.slots.some((q) => q.x < -0.01 || q.y < -0.01 || q.x + q.w > L.sheetW + 0.01 || q.y + q.h > L.sheetH + 0.01)) return 'las fotos no caben en la hoja 10x15';
+  return '';
+}

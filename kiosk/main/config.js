@@ -1,7 +1,7 @@
 import { app } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { DEFAULT_SETTINGS, DEFAULT_PRINT_SIZES, SETTINGS_SCHEMA } from '../shared/presets.js';
+import { DEFAULT_SETTINGS, DEFAULT_PRINT_SIZES, DEFAULT_ID_LOT_TYPES, SETTINGS_SCHEMA } from '../shared/presets.js';
 
 let settings = null;
 const file = () => path.join(app.getPath('userData'), 'settings.json');
@@ -33,6 +33,8 @@ export function getSettings() {
       const pq = settings.printSizes.find((s) => s.id === 'pola10');
       const def = DEFAULT_PRINT_SIZES.find((s) => s.id === 'pola10');
       if (pq?.card?.win?.w === 100) Object.assign(pq, { name: def.name, card: structuredClone(def.card) });
+      // v5: lotes nuevos de carnet (5,1x5,1) que aún no tenga la instalación.
+      for (const l of DEFAULT_ID_LOT_TYPES) if (!settings.idLotTypes.some((x) => x.id === l.id)) settings.idLotTypes.push(structuredClone(l));
       settings.schema = SETTINGS_SCHEMA;
       try { saveSettings(settings); } catch { /* se reintentará al guardar */ }
     }
@@ -52,7 +54,12 @@ export function saveSettings(next) {
 /** Ajustes sin secretos, para enviarlos a la interfaz del cliente. */
 export function publicSettings() {
   const s = getSettings();
-  return { ...s, adminPin: undefined, email: { ...s.email, pass: s.email.pass ? '••••••' : '' } };
+  const sec = s.security || {};
+  return {
+    ...s, adminPin: undefined, email: { ...s.email, pass: s.email.pass ? '••••••' : '' },
+    // La interfaz del cliente solo necesita saber qué verificaciones hay, nunca los secretos.
+    security: { totpEnabled: !!(sec.totpEnabled && sec.totpSecret), emailEnabled: !!(sec.email && sec.smtp?.host) }
+  };
 }
 
 export const dataDir = (...p) => path.join(app.getPath('userData'), ...p);

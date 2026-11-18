@@ -1,3 +1,4 @@
+import { DEFAULT_FONTS } from './fonts.js';
 // Datos compartidos entre el proceso principal y la interfaz.
 // Todas las medidas en milímetros, siempre en vertical (ancho <= alto).
 
@@ -32,7 +33,10 @@ export const DEFAULT_ID_PRESETS = [
 export const DEFAULT_ID_LOT_TYPES = [
   { id: 'c8', name: '8 fotos 35x45', kind: 'grid', pw: 35, ph: 45, cols: 4, rows: 2, landscape: true, price: 8, enabled: true },
   { id: 'c4g', name: '4 fotos 35x45 + 1 de 7x10', kind: 'grid+big', pw: 35, ph: 45, cols: 2, rows: 2, big: { w: 70, h: 100 }, landscape: true, price: 9, enabled: true },
-  { id: 'c4u', name: '4 fotos 51x51 (2x2")', kind: 'grid', pw: 51, ph: 51, cols: 2, rows: 1, landscape: true, price: 10, enabled: false },
+  // 5,1x5,1 cm (2x2"): en 10x15 caben 4 (2 filas exactas de 51 mm, sin separación vertical).
+  { id: 's4', name: '4 fotos 5,1x5,1', kind: 'grid', pw: 51, ph: 51, cols: 2, rows: 2, landscape: true, price: 10, enabled: true },
+  // La 5x7 usa el mismo encuadre que las pequeñas (mismo ancho y misma altura de la cabeza; se alarga hacia abajo).
+  { id: 's4b', name: '4 fotos 5,1x5,1 + 1 de 5x7', kind: 'grid+big', pw: 51, ph: 51, cols: 2, rows: 2, big: { w: 50, h: 70 }, bigFollows: true, landscape: true, price: 11, enabled: true },
   { id: 'c12', name: '12 fotos 26x32', kind: 'grid', pw: 26, ph: 32, cols: 4, rows: 3, landscape: false, price: 8, enabled: false }
 ];
 export const DEFAULT_ID_OPTIONS = { allowGuides: true, allowBorder: true, guides: true, border: false, faceGuides: true };
@@ -74,7 +78,7 @@ export const DEFAULT_SHEETS = [
 ];
 
 export const DEFAULT_SETTINGS = {
-  schema: 4, // = SETTINGS_SCHEMA
+  schema: 5, // = SETTINGS_SCHEMA
   storeName: 'Pizarro',
   // Tamaños que se ven directamente en la zona de selección; el resto, en «Más tamaños».
   quickSizes: ['9x13', '10x15', '13x18', '15x20', '20x30', 'A4'],
@@ -91,12 +95,28 @@ export const DEFAULT_SETTINGS = {
   idDefaults: { sheetId: '10x15', gapMm: 2, marginMm: 3, guides: 'marks', faceGuides: true },
   idLots: DEFAULT_ID_LOTS,
   idLotTypes: DEFAULT_ID_LOT_TYPES,
+  // Impresora simulada para pruebas: los tamaños sin impresora que admite una DNP DS620 se «imprimen» como JPEG en una carpeta.
+  simPrinter: { enabled: true, folder: '' },
+  // Fotos de los pedidos: se guardan 30 días salvo que el cliente pida que se borren.
+  keepPhotosDefault: true,
+  // PIN de caja (3 cifras aleatorias por pedido): 'off', 'all' (todo) o 'custom' (copias, carnet o tamaños concretos).
+  pin: { mode: 'all', prints: true, idlots: true, sizes: [] },
+  // Ticket para pagar en caja. printer vacío = se guarda en PDF (pruebas). Se envía al servidor para Gestión Pizarro.
+  ticket: { enabled: true, printer: '', ivaPct: 21, header: '', footer: 'Gracias por tu visita' },
   idOptions: DEFAULT_ID_OPTIONS,
   ordersRetentionDays: 30,
   // Datos del responsable para la información RGPD y el aviso legal de la pantalla de inicio.
   legal: { company: '', nif: '', address: '', email: '', phone: '', dpo: '', registry: '' },
   upload: { port: 8787, wifiSsid: '', wifiPassword: '', wifiType: 'WPA' },
   shareFolders: [],
+  // «Mi galería» (solo personal, con PIN): entradas de red permitidas. 'gallery', 'server' y 'share:<ruta>'.
+  galleryNet: ['gallery', 'server'],
+  // Letras (Administración → Letras): programa y títulos por un lado, mensajes de la pantalla de espera por otro.
+  fonts: DEFAULT_FONTS,
+  // Copia de seguridad: días (0 = domingo) y franja, partes, completa o incremental, carpeta del servidor y 15 días.
+  backup: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '14:00', to: '16:00', parts: { settings: true, orders: true, stats: true, masks: true }, mode: 'incremental', folder: '', keepDays: 15, fullEvery: 7 },
+  // Verificación tras 5 PIN erróneos: app de autenticación en el móvil de la empresa (TOTP) y/o código por correo (SMTP).
+  security: { totpEnabled: false, totpSecret: '', email: '', smtp: { host: '', port: 587, secure: false, user: '', pass: '', from: '' } },
   bluetoothInbox: 'C:\\KioscoPizarro\\Bluetooth',
   showFixedDrives: false,
   email: { enabled: false, address: '', host: '', port: 993, secure: true, user: '', pass: '', pollSeconds: 20 },
@@ -123,7 +143,7 @@ export function sizeColor(sizes, id) {
 }
 
 /** Versión de la estructura de ajustes; al subirla, config.js añade lo nuevo a instalaciones existentes. */
-export const SETTINGS_SCHEMA = 4;
+export const SETTINGS_SCHEMA = 5;
 
 // ---------- Texto y escritura a mano sobre la copia ----------
 // Fuentes de Windows: así la vista previa (Chromium) y la impresión (canvas) usan exactamente la misma letra.
@@ -136,3 +156,40 @@ export const OVERLAY_FONTS = [
 ];
 export const OVERLAY_COLORS = ['#333333', '#0F2740', '#ffffff', '#B5654A', '#6B7055', '#C9B29A', '#A84C6E'];
 export const hasOverlay = (o) => !!(o && ((o.texts && o.texts.length) || (o.strokes && o.strokes.length)));
+
+/**
+ * Salida de un tamaño: 'print' (imprimir aquí), 'server' (enviar al servidor) o 'both'.
+ * Si el tamaño tiene 'auto' (o nada), sigue los ajustes generales de Impresión y envío.
+ */
+export const SIZE_OUTPUTS = [['auto', 'Según ajustes generales'], ['print', 'Imprimir'], ['server', 'Enviar al servidor'], ['both', 'Imprimir y enviar']];
+export function sizeOutput(size, settings) {
+  const o = size?.out;
+  if (o === 'print' || o === 'server' || o === 'both') return o;
+  const d = settings?.delivery || {};
+  const pr = d.print !== false, sv = !!d.server;
+  return pr && sv ? 'both' : sv ? 'server' : pr ? 'print' : 'none';
+}
+
+/** Formatos de papel de la DNP DS620 (mm, en vertical): 9x13, 10x15, 13x18, 15x20, 15x23 y la tira 5x15. */
+export const DS620_MEDIA = [[89, 127], [102, 152], [127, 178], [152, 203], [152, 229], [51, 152]];
+export function ds620Supports(wMm, hMm) {
+  const a = Math.min(wMm, hMm), b = Math.max(wMm, hMm);
+  return DS620_MEDIA.some(([w, h]) => Math.abs(w - a) <= 3 && Math.abs(h - b) <= 3);
+}
+
+/** Valida un tamaño importado. Devuelve un texto de error o ''. */
+export function sizeProblem(z) {
+  const num = (v, a, b) => Number.isFinite(Number(v)) && Number(v) >= a && Number(v) <= b;
+  if (!z || typeof z.id !== 'string' || !z.id.trim()) return 'falta el identificador';
+  if (typeof z.name !== 'string' || !z.name.trim()) return 'falta el nombre';
+  if (!num(z.w, 10, 1500) || !num(z.h, 10, 1500)) return 'medidas no válidas';
+  if (!num(z.price ?? 0, 0, 100000)) return 'precio no válido';
+  if (z.tiers != null && (!Array.isArray(z.tiers) || z.tiers.some((t) => !num(t?.from, 1, 1e6) || !num(t?.price, 0, 100000)))) return 'tramos de precio no válidos';
+  if (z.color != null && !/^#[0-9a-f]{6}$/i.test(z.color)) return 'color no válido';
+  if (z.out != null && !SIZE_OUTPUTS.some(([k]) => k === z.out)) return 'salida no válida';
+  if (z.card != null) {
+    const c = z.card, W = Math.min(z.w, z.h);
+    if (!num(c.h, 10, Math.max(z.w, z.h)) || !c.win || !num(c.win.x, 0, W) || !num(c.win.y, 0, c.h) || !num(c.win.w, 5, W) || !num(c.win.h, 5, c.h) || c.win.x + c.win.w > W + 0.01 || c.win.y + c.win.h > c.h + 0.01) return 'formato Polaroid no válido';
+  }
+  return '';
+}

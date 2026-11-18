@@ -4,11 +4,30 @@ import path from 'node:path';
 import { getSettings, dataDir } from './config.js';
 import { getSession, makeCode } from './session.js';
 import { renderPhotoBuffer, saveJpeg, renderIdSheets, renderPrint, renderLotSheet } from './render.js';
-import { enqueuePrint, pickPrinter } from './print.js';
+import { enqueuePrint, pickPrinter, printersFor } from './print.js';
 import { sendOrDefer, exportRelPaths } from './lab.js';
-import { saveOrder, getOrder, updateOrder, storedPhotos, orderDir, findHeld, deleteOrder, photoIdsOf } from './store.js';
+import crypto from 'node:crypto';
+import { saveOrder, getOrder, updateOrder, storedPhotos, orderDir, findHeld, deleteOrder, photoIdsOf, listOrders, dropOriginals } from './store.js';
+import { makeTicket, printTicket, sendTicket, ticketStatus } from './ticket.js';
+import { checkGate } from './security.js';
+import { logEvent } from './stats.js';
+
+/** Datos anónimos de un pedido para las estadísticas. */
+function orderStat(order, files, status, serverFiles = []) {
+  const sizes = {}, amounts = {}, server = {}, qtyById = {};
+  for (const f of files || []) if (f.size?.id && f.lotPrice == null) qtyById[f.size.id] = (qtyById[f.size.id] || 0) + (f.qty || 1);
+  for (const f of files || []) {
+    const q = f.qty || 1;
+    sizes[f.sizeName] = (sizes[f.sizeName] || 0) + q;
+    // Importe por tamaño: lotes a su precio; copias con el precio del tramo que corresponde a la cantidad total de ese tamaño.
+    const unit = f.lotPrice != null ? f.lotPrice : priceFor(f.size, qtyById[f.size?.id] || q);
+    amounts[f.sizeName] = Math.round(((amounts[f.sizeName] || 0) + unit * q) * 100) / 100;
+  }
+  for (const f of serverFiles) server[f.sizeName] = (server[f.sizeName] || 0) + (f.qty || 1);
+  return { orderNo: order.orderNo, kind: order.kind, total: order.total, copies: Object.values(sizes).reduce((a, b) => a + b, 0), sizes, amounts, server, status };
+}
 import { frameDims, sheetLayout, packSheets } from '../shared/layout.js';
-import { priceFor } from '../shared/presets.js';
+import { priceFor, sizeOutput } from '../shared/presets.js';
 
 function nextOrderNo() {
   const f = dataDir('order-counter.txt');
@@ -91,7 +110,7 @@ async function renderOrder(spec, photos, outDir, progress) {
       const { buf } = await renderLotSheet(photo, l, lot, dpi);
       const file = path.join(outDir, `${String(i).padStart(3, '0')}_carnet_${lot.id}.jpg`);
       await saveJpeg(buf, file, dpi, true);
-      files.push({ file, sizeName: `Carnet ${lot.name}`, wMm: 102, hMm: 152, qty: Math.max(1, l.copies | 0), size: sheetSize, original: `${path.basename(photo.name || 'foto', path.extname(photo.name || ''))} ${lot.name}` });
+      files.push({ file, sizeName: `Carnet ${lot.name}`, wMm: 102, hMm: 152, qty: Math.max(1, l.copies | 0), size: sheetSize, lotPrice: Number(lot.price) || 0, original: `${path.basename(photo.name || 'foto', path.extname(photo.name || ''))} ${lot.name}` });
     }
     return files;
   }
@@ -138,40 +157,54 @@ async function deliver(order, photos, progress) {
   try {
     await updateOrder(order.orderNo, { status: 'processing', error: null });
     const files = await renderOrder(order.spec, photos, outDir, progress);
-    // Qué hacer: 'auto' sigue los ajustes (imprimir y/o servidor); 'print' y 'lab' fuerzan una sola acción.
-    const d = s.delivery || {};
-    const doPrint = order.destination === 'print' || (order.destination === 'auto' && d.print !== false);
-    const doServer = order.destination === 'lab' || (order.destination === 'auto' && !!d.server);
-    if (!doPrint && !doServer) throw new Error('No hay ninguna salida activada (imprimir o enviar al servidor). Revisa los ajustes.');
+    // Qué hacer con cada copia: 'auto' sigue la salida de su tamaño (o la general); 'print' y 'lab' fuerzan una sola acción.
+    const outOf = (f) => (order.destination === 'lab' ? 'server' : order.destination === 'print' ? 'print' : sizeOutput(f.size, s));
+    const printFiles = files.filter((f) => ['print', 'both'].includes(outOf(f)));
+    const serverFiles = files.filter((f) => ['server', 'both'].includes(outOf(f)));
+    if (!printFiles.length && !serverFiles.length) throw new Error('No hay ninguna salida activada (imprimir o enviar al servidor). Revisa los ajustes.');
     const result = { printed: false, server: null };
-    if (doPrint) {
+    if (printFiles.length) {
       const jobs = [];
-      for (const f of files) {
+      for (const f of printFiles) {
         const printer = pickPrinter(f.size);
         if (!printer) throw new Error(`No hay impresora asignada para ${f.sizeName}.`);
         progress({ text: `Enviando a ${printer}…` });
-        jobs.push(enqueuePrint(f.file, { printer, wMm: f.wMm, hMm: f.hMm, copies: f.qty, useDriverPaper: f.size.useDriverPaper }));
+        jobs.push(enqueuePrint(f.file, { printer, wMm: f.wMm, hMm: f.hMm, copies: f.qty, useDriverPaper: f.size.useDriverPaper })
+          .then(() => logEvent('print', { printer, sizeId: f.size?.id, sizeName: f.sizeName, wMm: f.wMm, hMm: f.hMm, copies: f.qty })));
       }
       await Promise.all(jobs);
       result.printed = true;
     }
-    if (doServer) {
+    if (serverFiles.length) {
       progress({ text: 'Enviando al servidor…' });
-      const rels = exportRelPaths(order.orderNo, order.createdAt, files);
+      const rels = exportRelPaths(order.orderNo, order.createdAt, serverFiles);
       const record = {
         orderNo: order.orderNo, createdAt: order.createdAt, kind: order.kind, destination: 'lab', customer: order.customer || {},
         total: order.total, currency: s.currency, store: s.storeName,
-        items: files.map((f, i) => ({ file: path.basename(rels[i]), size: f.sizeName, wMm: f.wMm, hMm: f.hMm, qty: f.qty, original: f.original }))
+        items: serverFiles.map((f, i) => ({ file: path.basename(rels[i]), size: f.sizeName, wMm: f.wMm, hMm: f.hMm, qty: f.qty, original: f.original }))
       };
       // Si el servidor no responde, la copia queda en la ruta local alternativa y se reintenta sola.
-      result.server = await sendOrDefer(record, files.map((f) => f.file), rels);
+      // Cada tamaño puede ir a su carpeta del servidor; si no tiene, a la carpeta por defecto (Impresión y envío).
+      const groups = new Map();
+      serverFiles.forEach((f, i) => { const d = f.size?.serverFolder || s.delivery?.serverFolder || ''; if (!groups.has(d)) groups.set(d, []); groups.get(d).push(i); });
+      const parts = [];
+      for (const [dest, idx] of groups) {
+        const rec = { ...record, items: idx.map((i) => record.items[i]) };
+        parts.push({ dest, ...(await sendOrDefer(rec, idx.map((i) => serverFiles[i].file), idx.map((i) => rels[i]), dest)) });
+      }
+      result.server = parts.length === 1 ? parts[0] : {
+        server: parts.every((p) => p.server), saved: parts.reduce((a, p) => a + (p.saved || 0), 0),
+        where: parts.filter((p) => p.server).map((p) => p.where).join(' · '), local: parts.filter((p) => !p.server).map((p) => p.local).join(' · ') || undefined, parts
+      };
     }
     await fsp.rm(outDir, { recursive: true, force: true });
     await fsp.appendFile(dataDir('orders.log.jsonl'), JSON.stringify({ orderNo: order.orderNo, at: new Date().toISOString(), destination: order.destination, total: order.total, result }) + '\n');
     const updated = await updateOrder(order.orderNo, { status: result.printed ? 'printed' : 'sent', error: null, delivery: result });
+    logEvent('order', orderStat(order, files, result.printed ? 'printed' : 'sent', serverFiles));
     return { ...updated, delivery: result };
   } catch (e) {
     await updateOrder(order.orderNo, { status: 'error', error: e.message }).catch(() => {});
+    logEvent('order', { orderNo: order.orderNo, kind: order.kind, total: order.total, copies: order.count, sizes: {}, status: 'error' });
     throw e;
   }
 }
@@ -186,21 +219,105 @@ const sessionPhotos = () => Object.fromEntries((getSession()?.photos || []).map(
 export async function submitOrder(spec, progress = () => {}, opts = {}) {
   const s = getSettings();
   const { total, count } = quote(spec);
+  const awaiting = needsPin(spec, s) && !opts.reprocessOf;
   const order = await saveOrder({
-    orderNo: nextOrderNo(), status: 'processing', kind: spec.kind, destination: spec.destination || 'auto',
-    customer: spec.customer || {}, spec: stripSpec(spec), total, count, currency: s.currency, reprocessOf: opts.reprocessOf || undefined
+    orderNo: nextOrderNo(), status: awaiting ? 'awaiting' : 'processing', kind: spec.kind, destination: spec.destination || 'auto',
+    customer: spec.customer || {}, spec: stripSpec(spec), total, count, currency: s.currency, reprocessOf: opts.reprocessOf || undefined,
+    keepPhotos: spec.keepPhotos !== false,
+    ...(awaiting ? { pin: String(crypto.randomInt(0, 1000)).padStart(3, '0'), pinTries: 0 } : {})
   }, sessionPhotos());
+  if (opts.resumeOf) { const held = await findHeld(opts.resumeOf); if (held) await deleteOrder(held.orderNo); }
+  // Ticket para pagar en caja (y para Gestión Pizarro).
+  const ticket = s.ticket?.enabled !== false ? await issueTicket(order, progress) : null;
+  if (awaiting) { logEvent('order', { orderNo: order.orderNo, kind: order.kind, total, copies: count, sizes: {}, status: 'awaiting' }); return { orderNo: order.orderNo, total, count, awaiting: true, ticket }; }
   let done;
   try {
     done = await deliver(order, storedPhotos(order), progress);
   } catch (e) {
     throw new Error(`${e.message} (el pedido ${order.orderNo} queda guardado en «Pedidos con error»)`);
   }
-  if (opts.resumeOf) { const held = await findHeld(opts.resumeOf); if (held) await deleteOrder(held.orderNo); }
-  return { orderNo: order.orderNo, total, count, delivery: done?.delivery };
+  await afterDelivery(order);
+  return { orderNo: order.orderNo, total, count, delivery: done?.delivery, ticket };
 }
 
-const stripSpec = ({ destination, customer, ...rest }) => rest;
+const stripSpec = ({ destination, customer, keepPhotos, ...rest }) => rest;
+
+/** ¿Este pedido necesita el PIN de caja para imprimirse? (Administración → Impresión y envío → PIN). */
+export function needsPin(spec, s = getSettings()) {
+  const p = s.pin || {};
+  if (p.mode === 'all') return true;
+  if (p.mode !== 'custom') return false;
+  if (spec.kind === 'idlots' || spec.kind === 'id') return !!p.idlots;
+  if (p.prints) return true;
+  return (spec.items || []).some((i) => (p.sizes || []).includes(i.sizeId));
+}
+
+async function issueTicket(order, progress) {
+  const t = makeTicket(order);
+  progress({ text: 'Imprimiendo el ticket…' });
+  let printed = null;
+  try { printed = await printTicket(t); } catch (e) { printed = { error: e.message }; }
+  const sent = await sendTicket(t, order.pin);
+  await updateOrder(order.orderNo, { ticket: { ...t, printed, sent: sent.sent } });
+  return { numero: t.numero, corto: t.corto, total: t.total, printed, sent: sent.sent };
+}
+
+/** Si el cliente no quiere que se guarden sus fotos, se borran al entregar el pedido. */
+async function afterDelivery(order) {
+  if (order.keepPhotos === false) await dropOriginals(order.orderNo).catch(() => {});
+}
+
+/**
+ * Libera un pedido pendiente de pago: con el PIN de 3 cifras que dan en caja (máximo 5 intentos),
+ * o sin PIN si lo hace el personal o si Gestión ha confirmado la venta.
+ */
+export async function releaseOrder(no, pin, progress = () => {}, { staff = false } = {}) {
+  const o = await getOrder(no);
+  if (!o) throw new Error('Pedido no encontrado');
+  if (o.status !== 'awaiting') throw new Error(o.status === 'cancelled' ? 'Este pedido se ha anulado en caja' : 'Este pedido ya no está pendiente de pago');
+  // PIN de caja: 5 fallos → bloqueo de 5 minutos o verificación con el móvil o el correo de la empresa.
+  if (!staff) {
+    try { checkGate(`order:${no}`, pin, o.pin); } catch (e) { await updateOrder(no, { pinTries: (o.pinTries || 0) + 1 }).catch(() => {}); throw e; }
+  }
+  const released = await updateOrder(no, { status: 'processing', releasedAt: new Date().toISOString(), releasedBy: staff ? 'personal' : 'pin' });
+  const done = await deliver(released, storedPhotos(released), progress);
+  await afterDelivery(released);
+  return { orderNo: no, total: o.total, count: o.count, delivery: done.delivery };
+}
+
+/** Pedido pendiente por su número completo o por las últimas cifras del ticket. */
+export async function findAwaiting(input) {
+  const q = String(input || '').trim().toUpperCase();
+  if (!q) return null;
+  const list = await listOrders('awaiting');
+  return list.find((o) => o.orderNo.toUpperCase() === q) || list.find((o) => o.orderNo.split('-').pop().replace(/^0+/, '') === q.replace(/^0+/, '')) || null;
+}
+
+/** Consulta al servidor los tickets pendientes: venta confirmada → se imprime; anulada → se anula el pedido. */
+let polling = false;
+export async function pollTickets(log = () => {}) {
+  if (polling) return;
+  polling = true;
+  try {
+    for (const o of await listOrders('awaiting')) {
+      const estado = await ticketStatus(o.orderNo);
+      if (estado === 'pagado') {
+        logEvent('paid', { orderNo: o.orderNo, total: o.total });
+        try { await releaseOrder(o.orderNo, null, () => {}, { staff: true }); log(`Pedido ${o.orderNo}: venta confirmada, se imprime`); } catch (e) { log(`Pedido ${o.orderNo}: ${e.message}`); }
+      } else if (estado === 'anulado') {
+        await updateOrder(o.orderNo, { status: 'cancelled' });
+        logEvent('order', { orderNo: o.orderNo, kind: o.kind, total: o.total, copies: o.count, sizes: {}, status: 'cancelled' });
+        log(`Pedido ${o.orderNo}: venta anulada en caja`);
+      }
+    }
+  } finally { polling = false; }
+}
+
+/** Estado actual de un pedido (para la pantalla de espera del PIN). */
+export async function orderState(no) {
+  const o = await getOrder(no);
+  return o ? { status: o.status, delivery: o.delivery || null, total: o.total } : null;
+}
 
 /** Retener un pedido sin terminar: guarda originales y ajustes; devuelve un código para continuarlo. */
 export async function holdOrder(spec, customer = {}, existingCode) {
@@ -243,5 +360,5 @@ export async function retryOrder(no, progress = () => {}) {
 
 /** Qué tamaños se pueden imprimir en el kiosco. */
 export function printableSizes() {
-  return getSettings().printSizes.filter((x) => (x.printers || []).length).map((x) => x.id);
+  return getSettings().printSizes.filter((x) => printersFor(x).length).map((x) => x.id);
 }

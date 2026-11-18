@@ -225,6 +225,139 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
     - Copias por lote. «Añadir otro lote» memoriza el actual con su miniatura y permite elegir otro sin salir. Al continuar se pasa al resumen con su confirmación.
     - En Administración → Lotes de carnet se activa o desactiva cada lote (hay otros dos de serie, desactivados), se cambian nombre y precio, y se ven las vistas previas. También se decide qué opciones puede tocar el cliente.
     - Los pedidos antiguos de carnet por formato se siguen abriendo en la pantalla anterior.
+  - **Zoom continuo (petición posterior):**
+    - Al reducir la foto por debajo de «llena el formato» (con dos dedos, el deslizador «Más pequeña / Más grande» o la rueda), pasa sola a márgenes con el color de fondo elegido (blanco por defecto). Al ampliar, vuelve sola a recorte.
+    - El botón «Ajustar con fondo» se llama ahora «Foto entera».
+    - Los colores de fondo se ven siempre, así la imagen no cambia de tamaño al pasar de un modo a otro.
+    - La parte de la foto que queda fuera del corte se ve más (opacidad del 55 %) y el borde del corte está más marcado.
+  - **Lotes de 5,1x5,1 (2x2") en 10x15:**
+    - «4 fotos 5,1x5,1»: es el máximo que cabe. Las dos filas de 51 mm ocupan los 102 mm del papel, así que no hay separación vertical.
+    - «4 fotos 5,1x5,1 + 1 de 5x7»: la 5x7 sigue el encuadre de las pequeñas (`bigFollows`, `followCrop`). Mantiene el mismo ancho en la foto y el mismo borde superior, y se alarga por abajo.
+    - El antiguo «c4u» (que eran 2 fotos 51x51) desaparece de las instalaciones nuevas.
+  - **Plantillas de carnet:** en Administración → Lotes de carnet se pueden exportar y cargar en JSON (`pizarro-plantillas-carnet`) con sus opciones.
+    - Al cargar, cada plantilla se valida (`lotProblem`: medidas, tipo y que quepa en 10x15).
+    - Se actualiza la que tiene el mismo id y se añaden las nuevas. Las dañadas se omiten indicando el motivo.
+    - Cada plantilla se puede quitar.
+  - **Miniaturas con copias:** llevan un marco del color de su tamaño. Si tienen varios tamaños, el contorno se reparte entre sus colores.
+  - **Filtros en la barra inferior:** forman una cuadrícula de 4x3 con cuadros iguales de 56 px y el nombre sobre la imagen. Antes eran de 6 columnas, con tamaños desiguales y cortados.
+  - **Impresora simulada DNP DS620** (Administración → Impresión y envío, activada para las pruebas):
+    - Los tamaños sin impresora que admite la DS620 (9x13, 10x15, 13x18, 15x20, 15x23 y 5x15, incluidas Polaroid y lotes de carnet) se «imprimen» como JPEG en `DocumentosKioscoPizarroImpresora simulada DNP DS620AAAA-MM-DD`, con `registro.txt`.
+    - También aparece en la lista de impresoras para asignarla a mano.
+    - **Hay que desactivarla al conectar la DS620 real.**
+  - **Miniaturas v4:**
+    - El nombre va debajo de la imagen, y a su lado un punto de color por cada tamaño con copias (con el número si caben). Sustituye al marco de color.
+    - La foto en vista previa se ve como una tarjeta azul profundo con un anillo arena y el nombre en crema.
+  - **Barra inferior más baja (unos 180 px, antes unos 290):**
+    - La calidad pasa a la cabecera de «Tamaño».
+    - Filtros en 6x2.
+    - Encuadre en 4 filas.
+    - «Texto», «A mano», marco y copia virtual juntos en «Más».
+  - **Salida por tamaño:** en Administración → Tamaños cada tamaño tiene un menú «Al confirmar el pedido», que hace que en un mismo pedido unos tamaños se impriman y otros vayan al servidor:
+    - Opciones: «Según ajustes generales», «Imprimir», «Enviar al servidor» o «Imprimir y enviar».
+    - `sizeOutput` decide la salida en el proceso principal y en el resumen.
+  - **Tamaños e Impresoras en dos menús:**
+    - **Tamaños:** color, nombre, medidas, precio, salida, lista rápida, y «Exportar / Importar tamaños» en JSON (`pizarro-tamanos`), que incluye precios y tramos, colores, salida y Polaroid.
+      - Las impresoras no viajan en el archivo.
+      - Al importar se validan (`sizeProblem`), se conservan las impresoras de este kiosco y se fusionan por id.
+    - **Impresoras:** impresoras detectadas, impresoras por tamaño, papel del driver y prueba. Indica si un tamaño usa la DS620 simulada o si no puede imprimirse aquí.
+    - Las tarifas siguen teniendo su CSV en «Tarifas».
+  - **Fotos guardadas 30 días salvo que el cliente diga lo contrario:**
+    - El resumen del pedido lleva «Guardar mis fotos 30 días», marcado por defecto (`keepPhotosDefault` en General).
+    - Si el cliente lo desmarca, los originales se borran al entregar el pedido (`dropOriginals`) y queda solo el registro.
+    - El aviso RGPD y el texto de inicio lo explican.
+  - **Selección múltiple:** se pueden aplicar 0 copias, lo que quita ese tamaño (o la foto) del pedido.
+  - **Resumen del pedido:** al tocar un tamaño se abre a la izquierda un lateral con las miniaturas de ese tamaño y sus copias.
+  - **PIN de caja:** cada pedido recibe un PIN de 3 cifras al azar (`crypto.randomInt`).
+    - Modos: «Para todo» (por defecto), «Solo para algunas cosas» (copias, carnet o tamaños concretos) o desactivado. Se configura en Impresión y envío.
+    - El pedido queda «Pendiente de pago» (estado `awaiting`) y no se imprime nada.
+    - El cliente paga en caja con su ticket y escribe el PIN en la pantalla de espera o, más tarde, desde el inicio en «Tengo un PIN de caja» (nº de ticket + PIN). Hay 5 intentos.
+    - El personal ve el PIN en Pedidos → «Pendientes de pago» (con el botón «Cobrado: liberar e imprimir») y en la web del servidor → Caja.
+    - Si Gestión confirma la venta, el kiosco lo imprime solo; si la anula, el pedido queda «Anulado». El kiosco lo consulta cada 20 s.
+  - **Ticket de caja (`kiosk/main/ticket.js`):**
+    - Ticket de 80 mm con el nº corto grande, líneas con el código de artículo (campo «Código» en Tamaños y en Lotes de carnet), total, base, IVA (21 % incluido, configurable) y código de barras Code 128.
+    - Se imprime en la impresora de tickets elegida; sin ella, se guarda en PDF en la carpeta de la impresora simulada.
+    - Se envía al servidor como «pendiente». Si no llega, se reintenta cada 20 s.
+  - **Servidor:**
+    - Tickets en `data/tickets`.
+    - API para Gestión Pizarro (`x-gestion-key`, documentada en `server/GESTION-API.md`): listar y confirmar o anular ventas.
+    - Pestaña «Caja» en la web, con pendientes, PIN, «Cobrado» y «Anular», y la suma del día solo con los pagados.
+    - Clave de Gestión en Ajustes.
+    - Los tickets pendientes no entran en contabilidad.
+  - **PIN impreso en el ticket**, en grande (recuadro «PIN PARA IMPRIMIR»), a petición de la tienda.
+  - **Recoger más tarde:** el nombre y el teléfono (9 cifras o más) son obligatorios, y el ticket indica «Pedido para recoger más tarde».
+  - **Pantalla de espera del PIN:** las frases cambian cada 15 s con letras elegantes y modernas (Montserrat ultraligera en mayúsculas, Sitka en cursiva, Plus Jakarta Sans ligera, Corbel Light y Sitka Heading; todas funcionan sin internet), distinto tamaño y efecto de ampliación y paneo (`components/Quotes.jsx`):
+    - «Tus fotos son tu memoria del pasado.»
+    - «Imprime tus recuerdos, nunca los perderás.»
+    - «La memoria es frágil…»
+  - **Mi galería, solo para el personal:**
+    - Ya no es una opción del inicio, sino un icono discreto junto al de ajustes que pide el PIN de seguridad.
+    - Solo deja cargar de las entradas de red que el administrador marca en Fuentes de fotos (`galleryNet`): galerías del servidor, carpeta del servidor y cada carpeta de red; se pueden marcar varias.
+    - Los clientes ya no ven «Mi galería» entre las fuentes.
+  - **Letras a elegir (Administración → Letras):**
+    - El programa tiene dos letras: el texto general y los títulos.
+    - Los mensajes de la pantalla de espera van aparte: una o varias letras, que rotan, cada una con opción de cursiva, mayúsculas o fina.
+    - Solo se ofrecen las letras instaladas en el equipo (`shared/fonts.js`).
+  - **Mensajes solo en la pantalla de espera:** se quita del inicio el lema «Tus recuerdos, impresos hoy» y «Impresión fotográfica». Se mantiene la indicación «Toca una opción para empezar».
+  - **Seguridad de los PIN (`kiosk/main/security.js`):**
+    - Afecta a los PIN de ajustes, Mi galería y caja.
+    - Un PIN erróneo borra lo escrito y avisa de los intentos que quedan.
+    - Con 5 fallos se bloquea 5 minutos; el bloqueo se guarda en `bloqueos.json`, así que reiniciar no lo salta.
+    - Se puede desbloquear antes con:
+      - el móvil de la empresa: app de autenticación (TOTP, RFC 6238), vinculada en General → «Vincular el móvil de la empresa» con un QR;
+      - un código de 6 cifras enviado por SMTP al correo de la empresa, válido 10 minutos.
+    - Los secretos no llegan a la interfaz del cliente.
+  - **Ajustes → Estadísticas (`kiosk/main/stats.js`, `screens/AdminStats.jsx`):**
+    - **Registro:** anónimo y aparte de los pedidos (estos se borran a los 30 días), en `estadisticas/AAAA-MM.jsonl`. Recoge:
+      - sesiones: inicio, duración, fotos, fuentes, si pidió y por qué acabó;
+      - pedidos con su estado;
+      - cada impresión (impresora, formato, copias);
+      - ventas confirmadas;
+      - PIN erróneos y bloqueos.
+      No guarda nombres, teléfonos ni fotos.
+    - **Vista diaria** (por hora) o **mensual** (por día), con flechas para cambiar de periodo y «Exportar CSV».
+    - **Indicadores:**
+      - sesiones y % con pedido;
+      - duración media y mediana;
+      - fotos por sesión;
+      - pedidos, copias y ticket medio;
+      - importe y lo confirmado en caja;
+      - copias impresas;
+      - pendientes de pago, anulados y errores;
+      - PIN erróneos y bloqueos.
+    - **Gráficos:**
+      - barras de una sola medida a elegir (sesiones, pedidos, copias o importe);
+      - horas de más afluencia y mapa día × hora;
+      - fuentes usadas;
+      - copias frente a carnet;
+      - motivos de las sesiones sin pedido;
+      - tamaños más pedidos;
+      - últimas sesiones.
+    - **Consumos por impresora:** copias, trabajos, m² de papel y rollos estimados de la DNP DS620 por formato (6x4" 400, 5x7" 230, 6x8" 200, 6x9" 180).
+  - **Tarifas:**
+    - Lista de tamaños con precio/ud, precios por cantidad, impresora, salida y carpeta.
+    - «Editar» abre un editor (`screens/AdminTariffs.jsx`) con: tamaño, precio por unidad, tramos (añadir o quitar, con ejemplo), impresoras, «Al confirmar el pedido» y la carpeta del servidor.
+    - La carpeta es la de por defecto (Impresión y envío) hasta que el administrador elija otra (`size.serverFolder`).
+    - Al enviar, cada tamaño va a su carpeta: se agrupa por destino y `sendOrDefer` recibe `dest`, que también se guarda en `pendiente.json` para los reintentos.
+  - **Ayuda, Exportar e Importar en las 14 páginas de Ajustes (`AdminTools.jsx`, `main/sections.js`):**
+    - Los ajustes de cada página se guardan en JSON (`pizarro-ajustes`, por sección, sin contraseñas).
+    - Al importar se rechaza el archivo de otra página y se conservan el PIN y las contraseñas.
+    - Pedidos, estadísticas y máscaras se exportan como carpetas; al importarlas solo se añade lo que no existe.
+  - **Ajustes → Copia de seguridad (`main/backup.js`, `AdminBackup.jsx`):**
+    - **Programación:** días y franja horaria a elegir; por defecto, todos los días de 14:00 a 16:00. Se hace una vez al día y, si falla, se reintenta cada 15 min dentro de la franja.
+    - **Contenido:** todo el kiosco o partes (ajustes, pedidos y fotos, estadísticas, máscaras).
+    - **Tipo:** completa o incremental. La incremental copia solo lo que cambió y su `manifest.json` dice dónde está cada archivo. Cada 7 días se hace una completa.
+    - **Destino:** una carpeta del servidor elegida por el administrador (`<carpeta>/KioscoPizarro_<kiosco>/AAAA-MM-DD_HHMMSS_<tipo>`).
+    - **Conservación:** 15 días; se borran las más antiguas que ya no necesita ninguna copia posterior.
+    - **Restauración** de una copia por partes.
+    - **Configuración completa:** exportar e importar, con contraseñas opcionales, y «Volver a los ajustes de fábrica» (conserva el PIN, las claves y las copias).
+  - **Estadísticas ampliadas:**
+    - Tabla «Copias por tamaño y por impresora»: pedidos, copias, % del total, importe, copias en cada impresora, enviadas al servidor y fila de totales.
+    - Copias por pedido, m² de papel y copias enviadas al servidor.
+    - Día de la semana con más afluencia e importe por tipo (copias o carnet).
+    - El registro de cada pedido guarda ahora el importe y las copias al servidor por tamaño.
+  - **Texto del inicio:** «Tus fotos solo se usan para tu pedido. Por seguridad, tu pedido se almacena durante 30 días por si necesitas más copias, salvo que solicites su borrado.»
+  - **Pendiente:** unificar el formato del ticket y los códigos con las tarifas de Gestión Pizarro (el cliente dirá dónde están).
+  - **Migración de ajustes (schema 5):** añade los lotes nuevos que falten.
   - **Migración de ajustes (schema 4):** las instalaciones existentes reciben las Polaroid y los lotes nuevos, y la Polaroid 10x10 antigua pasa a 8,5x8,5.
 
 ---
@@ -306,6 +439,9 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
     - Migración desde ajustes antiguos.
 
 ### Pendiente
+- [ ] **Elegir la carpeta del servidor para las copias de seguridad** (Ajustes → Copia de seguridad). Sin ella no se hacen copias.
+- [ ] **Unificar el ticket con Gestión Pizarro** cuando el cliente indique dónde están sus tarifas (códigos de artículo y formato de líneas), y conectar Gestión a la API de tickets.
+- [ ] **Reiniciar el servidor de la tienda** para tener la Caja y la API de tickets. Hasta entonces, el kiosco guarda los tickets en local y los reenvía solo.
 - [ ] **Datos legales del titular** en Administración → General (razón social, NIF, dirección, correo). Hasta entonces el aviso legal muestra marcadores entre corchetes.
 - [ ] **Reiniciar el servidor de la tienda** para que tenga los nuevos puntos de exportación (`/api/export/folders` y el guardado por carpetas) y fijar su «carpeta raíz de exportación».
 - [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP o Mitsubishi) y ajustar los precios reales.
@@ -472,3 +608,80 @@ cd kiosk && npm install && npm start
 - **Carnet:** pantalla de lotes nueva (8 de 35x45, y 4 de 35x45 + 1 de 7x10) con vista previa, guías y marco, copias, «Añadir otro lote» y confirmación.
 - **Pruebas:** motor, envío con fallo y reintento, y recorrido de la interfaz a 1920x1080: todo correcto.
 - **Revisión de seguridad y normativa:** entregada al cliente.
+
+### 17/11/2026 19:17 – 19:55 · Sesión cerrada (guardado automático, 39 min)
+- Archivos modificados:
+  - `kiosk/main/config.js`
+  - `kiosk/renderer/src/App.jsx`
+  - `kiosk/renderer/src/components/LotPreview.jsx`
+  - `kiosk/renderer/src/screens/Admin.jsx`
+  - `kiosk/renderer/src/screens/Checkout.jsx`
+  - `kiosk/renderer/src/screens/Home.jsx`
+  - `kiosk/renderer/src/screens/IdLots.jsx`
+  - `kiosk/renderer/src/screens/Studio.jsx`
+  - `kiosk/renderer/src/styles.css`
+  - `kiosk/shared/presets.js`
+- **Petición posterior:**
+  - La foto se puede reducir sin activar nada: pasa sola a márgenes blancos y vuelve a recorte al ampliar.
+  - La zona recortada se ve mejor.
+  - Probado a 1920x1080 con el deslizador y la rueda: correcto.
+- **Peticiones posteriores:**
+  - Lotes 5,1x5,1: 4 fotos, y 4 + 1 de 5x7 con el mismo encuadre.
+  - Exportar y cargar plantillas de carnet.
+  - Marco de color en las miniaturas con copias.
+  - Filtros más grandes y aprovechando el espacio.
+  - Probado: render, validación y recorrido a 1920x1080, todo correcto.
+- **Peticiones posteriores:**
+  - DNP DS620 simulada: probada con un pedido de 4 copias (10x15, 13x18 y Polaroid). Salen los 4 JPEG y el registro.
+  - Miniaturas con el nombre y los puntos de color debajo, y marco claro en la foto en vista previa.
+  - Barra inferior de 180 px.
+- **Peticiones posteriores:**
+  - Salida por tamaño (imprimir, servidor o ambos), probada con un pedido de 10x15 (impreso en la DS620 simulada) y 13x18 (enviado al servidor de pruebas y confirmado).
+  - Exportar e importar tamaños.
+  - Menús Tamaños e Impresoras separados.
+- **Peticiones posteriores:**
+  - Fotos guardadas 30 días salvo petición del cliente.
+  - 0 copias en la selección múltiple.
+  - Lateral de miniaturas por tamaño en el resumen.
+  - PIN de caja de 3 cifras.
+  - Ticket de caja enviado al servidor para Gestión Pizarro.
+  - **Probado de principio a fin, todo correcto:**
+    - 7 fotos ×2: el PIN incorrecto se rechaza y el correcto imprime.
+    - Las fotos se borran si el cliente lo pide.
+    - Venta confirmada por la API de Gestión: se imprime solo.
+    - «Tengo un PIN de caja» desde el inicio.
+    - Ticket en PDF con IVA y código de barras.
+- **Peticiones posteriores:**
+  - PIN grande en el ticket.
+  - Nombre y teléfono obligatorios para recoger más tarde.
+  - Frases animadas en la pantalla de espera.
+  - Mi galería como icono con PIN y solo entradas de red.
+  - Probado a 1920x1080, todo correcto.
+
+### 18/11/2026 · Letras y seguridad de los PIN
+- **Letras:** se eligen por separado (programa, títulos y mensajes de espera).
+- **Inicio:** sin mensajes.
+- **PIN:** se borra si es erróneo; con 5 fallos se bloquea 5 minutos o hasta verificar con el móvil (TOTP) o el correo de la empresa.
+- **Probado, todo correcto:**
+  - Vector TOTP del RFC.
+  - Bloqueo y desbloqueo con el móvil y con el correo (servidor SMTP de prueba).
+  - PIN de caja.
+  - Letras guardadas y aplicadas.
+- **Ajustes → Estadísticas:**
+  - Sesiones, vista diaria y mensual, consumos de impresora (rollos estimados DS620), horas de más afluencia con mapa día × hora, y exportación CSV.
+  - Probado con sesiones reales del kiosco y un mes de datos de ejemplo, a 1920x1080: todo correcto.
+
+### 18/11/2026 · Tarifas, ayuda, copia de seguridad y estadísticas
+- **Tarifas:** lista y editor (precio, tramos, impresora, salida y carpeta del servidor por tamaño).
+- **Ajustes:** Ayuda, Exportar e Importar en todas las páginas.
+- **Copia de seguridad:** programada, completa o incremental, 15 días, restauración, configuración completa y ajustes de fábrica.
+- **Estadísticas:** copias por tamaño y por impresora, y más datos.
+- **Inicio:** texto de privacidad nuevo.
+- **Probado, todo correcto:**
+  - Completa e incremental, restauración por partes y conservación de 15 días.
+  - Secciones con y sin secretos.
+  - Carpeta del servidor por tamaño (servidor de pruebas).
+  - Las 14 páginas con ayuda, exportar e importar.
+  - Editor de tarifas guardado.
+  - Tabla de estadísticas.
+- **Subido a GitHub.**

@@ -1,6 +1,6 @@
 import React, { useId } from 'react';
 import { fileUrl } from '../api.js';
-import { lotSlots, slotGuides, clampCropRot, defaultCropRot } from '../../../shared/layout.js';
+import { lotSlots, slotGuides, clampCropRot, defaultCropRot, followCrop } from '../../../shared/layout.js';
 import { svgMatrixValues } from '../../../shared/color.js';
 
 /**
@@ -15,8 +15,10 @@ export default function LotPreview({ lot, photo, entry = {}, width = 260, src })
   const url = photo && (src || fileUrl(photo.thumb));
   const ang = entry.angle || 0;
   const cropFor = (s) => {
-    const c = s.big ? entry.cropBig : entry.crop;
-    return clampCropRot(c || defaultCropRot(photo.w, photo.h, s.w / s.h, ang), photo.w, photo.h, ang);
+    const main = clampCropRot(entry.crop || defaultCropRot(photo.w, photo.h, (lot.pw || 35) / (lot.ph || 45), ang), photo.w, photo.h, ang);
+    if (!s.big) return main;
+    if (lot.bigFollows) return followCrop(main, photo.w, photo.h, s.w / s.h, ang);
+    return clampCropRot(entry.cropBig || defaultCropRot(photo.w, photo.h, s.w / s.h, ang), photo.w, photo.h, ang);
   };
   return (
     <svg className="lot-preview" viewBox={`0 0 ${L.sheetW} ${L.sheetH}`} width={width} height={(width * L.sheetH) / L.sheetW} aria-label={lot.name}>

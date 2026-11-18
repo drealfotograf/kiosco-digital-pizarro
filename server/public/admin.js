@@ -128,7 +128,45 @@ async function uploadPhotos(g) {
 async function loadSettings() {
   const c = await api('/api/admin/config');
   $('sname').value = c.storeName; $('shot').value = c.hotFolder; $('skey').value = c.kioskKey; $('sshare').value = c.shareFolder; $('sexport').value = c.exportRoot;
+  $('sgkey').value = c.gestionKey || '';
 }
+$('sgregen').onclick = async () => {
+  if (!confirm('Gestión Pizarro dejará de poder confirmar ventas hasta que le pongas la nueva clave. ¿Continuar?')) return;
+  const r = await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({ regenerateGestionKey: true }) });
+  $('sgkey').value = r.gestionKey;
+};
+
+// ---------- Caja: tickets pendientes de pago ----------
+let tickets = [];
+const eur = (n, c) => new Intl.NumberFormat('es-ES', { style: 'currency', currency: c || 'EUR' }).format(n || 0);
+const ESTADO = { pendiente: 'Pendiente de pago', pagado: 'Pagado', anulado: 'Anulado' };
+async function loadTickets() { tickets = await api('/api/admin/tickets'); renderTickets(); }
+function renderTickets() {
+  const f = $('tfilter').value;
+  const q = $('tsearch').value.trim().toLowerCase();
+  const list = tickets.filter((t) => (!f || t.estado === f) && (!q || `${t.numero} ${t.corto} ${t.cliente?.name || ''}`.toLowerCase().includes(q)));
+  const hoy = new Date().toISOString().slice(0, 10);
+  const pagadosHoy = tickets.filter((t) => t.estado === 'pagado' && String(t.confirmadoEn || '').startsWith(hoy));
+  $('tsum').textContent = `Hoy: ${pagadosHoy.length} venta(s) confirmadas, ${eur(pagadosHoy.reduce((a, t) => a + t.total, 0))} · ${tickets.filter((t) => t.estado === 'pendiente').length} pendiente(s)`;
+  $('tickets').innerHTML = list.map((t) => `
+    <tr>
+      <td><b>${esc(t.corto || t.numero)}</b><div class="muted small">${esc(t.numero)}</div></td>
+      <td>${new Date(t.fecha).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}</td>
+      <td>${esc(t.cliente?.name || '-')}</td>
+      <td class="small">${t.lineas.map((l) => `${l.cantidad} × ${esc(l.descripcion)} <span class="muted">(${esc(l.codigo)})</span>`).join('<br>')}</td>
+      <td><b>${eur(t.total, t.moneda)}</b></td>
+      <td class="code" style="font-size:20px">${t.estado === 'pendiente' && t.pin ? esc(t.pin) : '-'}</td>
+      <td>${ESTADO[t.estado] || esc(t.estado)}${t.confirmadoPor ? `<div class="muted small">${t.confirmadoPor === 'gestion' ? 'Gestión' : 'Personal'}</div>` : ''}</td>
+      <td>${t.estado === 'pendiente' ? `<button class="btn primary" data-pay="${esc(t.numero)}">Cobrado</button> <button class="btn" data-void="${esc(t.numero)}">Anular</button>` : ''}</td>
+    </tr>`).join('') || '<tr><td colspan="8" class="muted">No hay tickets</td></tr>';
+  $('tickets').querySelectorAll('[data-pay],[data-void]').forEach((b) => (b.onclick = async () => {
+    const id = b.dataset.pay || b.dataset.void;
+    if (b.dataset.void && !confirm('¿Anular la venta de este ticket? El pedido no se imprimirá.')) return;
+    try { await api(`/api/admin/tickets/${encodeURIComponent(id)}`, { method: 'POST', body: JSON.stringify({ estado: b.dataset.pay ? 'pagado' : 'anulado' }) }); await loadTickets(); } catch (e) { alert(e.message); }
+  }));
+}
+$('tfilter').onchange = renderTickets;
+$('tsearch').oninput = renderTickets;
 $('ssave').onclick = async () => { await api('/api/admin/config', { method: 'PUT', body: JSON.stringify({ storeName: $('sname').value, hotFolder: $('shot').value, shareFolder: $('sshare').value, exportRoot: $('sexport').value }) }); $('smsg').textContent = 'Guardado'; };
 $('sregen').onclick = async () => {
   if (!confirm('Los kioscos dejarán de poder enviar pedidos hasta que les pongas la nueva clave. ¿Continuar?')) return;
@@ -139,8 +177,8 @@ $('sregen').onclick = async () => {
 let timer;
 async function start() {
   $('login').hidden = true; $('app').hidden = false;
-  await Promise.all([loadOrders(), loadGalleries(), loadSettings()]);
+  await Promise.all([loadOrders(), loadGalleries(), loadSettings(), loadTickets()]);
   clearInterval(timer);
-  timer = setInterval(() => loadOrders().catch(() => {}), 15000);
+  timer = setInterval(() => { loadOrders().catch(() => {}); loadTickets().catch(() => {}); }, 10000);
 }
 if (token) start().catch(logout);

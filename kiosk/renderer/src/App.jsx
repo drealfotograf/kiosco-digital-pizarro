@@ -5,11 +5,19 @@ import Sources from './screens/Sources.jsx';
 import Studio from './screens/Studio.jsx';
 import IdPhoto from './screens/IdPhoto.jsx';
 import IdLots from './screens/IdLots.jsx';
-import Checkout, { Done } from './screens/Checkout.jsx';
+import Checkout, { Done, AwaitPin } from './screens/Checkout.jsx';
 import Admin from './screens/Admin.jsx';
 import { Modal, Icon, TouchField, Busy } from './components/ui.jsx';
 import { checkFileName, extOf } from '../../shared/presets.js';
 import { DEFAULT_EDIT, landOf } from './screens/Studio.jsx';
+import { galleryNetSources } from './screens/Sources.jsx';
+import { fontStack } from '../../shared/fonts.js';
+
+function applyFonts(f = {}) {
+  const r = document.documentElement.style;
+  r.setProperty('--font-ui', fontStack(f.ui || 'Montserrat'));
+  r.setProperty('--font-head', fontStack(f.headings || f.ui || 'Montserrat'));
+}
 
 const freshId = (s) => ({ presetId: null, custom: { w: 35, h: 45 }, people: [], sheetId: s.idDefaults.sheetId, gapMm: s.idDefaults.gapMm, marginMm: s.idDefaults.marginMm, guides: s.idDefaults.guides, faceGuides: s.idDefaults.faceGuides, separateSheets: false });
 
@@ -32,6 +40,7 @@ export default function App() {
   const [edits, setEdits] = useState({}); // por foto: filtro, color, giro, marco, encuadre y recorte por tamaño
   const [idState, setIdState] = useState(null);
   const [idLots, setIdLots] = useState([]);
+  const [netOnly, setNetOnly] = useState(null); // Mi galería: solo las entradas de red permitidas
   const [spec, setSpec] = useState(null);
   const [orderOpts, setOrderOpts] = useState({});
   const [result, setResult] = useState(null);
@@ -44,6 +53,8 @@ export default function App() {
   const lastTouch = useRef(Date.now());
   const toastTimer = useRef(null);
   const rollRef = useRef(roll);
+  // Estadísticas de la sesión del cliente (anónimas): inicio, fuentes usadas y si hizo pedido.
+  const statRef = useRef(null);
   rollRef.current = roll;
 
   const toast = useCallback((t) => {
@@ -60,6 +71,7 @@ export default function App() {
    * muestra el aviso, espera la confirmación y continúa con los siguientes.
    */
   const loadIntoRoll = useCallback(async (files, origin) => {
+    if (statRef.current && origin) statRef.current.sources.add(String(origin));
     let quiet = false;
     const added = [];
     const have = new Set(rollRef.current.map((e) => e.key));
@@ -146,9 +158,12 @@ export default function App() {
     return () => offs.forEach((f) => f());
   }, [toast, loadIntoRoll]);
 
-  const finish = useCallback(async () => {
+  const finish = useCallback(async (reason) => {
+    const st = statRef.current;
+    statRef.current = null;
+    if (st) api('stats:session', { start: st.start, photos: rollRef.current.length, sources: [...st.sources], flow: st.flow, ordered: st.ordered, reason: reason === 'idle' ? 'idle' : 'user' }).catch(() => {});
     await api('session:clear');
-    setRoll([]); setItems([]); setEdits({}); setIdLots([]); setSpec(null); setResult(null); setIdleWarn(0); setOrderOpts({}); setIssues([]);
+    setRoll([]); setItems([]); setEdits({}); setIdLots([]); setNetOnly(null); setSpec(null); setResult(null); setIdleWarn(0); setOrderOpts({}); setIssues([]);
     setScreen('home');
   }, []);
 
@@ -160,14 +175,16 @@ export default function App() {
       if (!settings || ['home', 'admin'].includes(screen) || busy) return;
       const idle = (Date.now() - lastTouch.current) / 1000;
       const limit = Math.max(30, settings.idleSeconds || 180);
-      if (idle > limit + 20) finish();
+      if (idle > limit + 20) finish('idle');
       else if (idle > limit) setIdleWarn(Math.ceil(limit + 20 - idle));
     }, 1000);
     return () => { window.removeEventListener('pointerdown', touch, true); clearInterval(t); };
   }, [settings, screen, finish, busy]);
 
-  const start = async (f, src = 'usb') => {
+  const start = async (f, src = 'usb', opts = {}) => {
     await api('session:new');
+    statRef.current = { start: new Date().toISOString(), sources: new Set(), flow: f, ordered: false };
+    setNetOnly(opts.netOnly || null);
     setFlow(f); setInitialSource(src); setItems([]); setEdits({}); setRoll([]); setIdLots([]); setOrderOpts({});
     setIdState(freshId(settings));
     setScreen('sources');
@@ -218,6 +235,24 @@ export default function App() {
     try { const o = await api('order:resume', code); openOrder(o, { resumeOf: o.code }); return true; } finally { setBusy(''); }
   };
 
+  /** Desde el inicio: nº de ticket + PIN de caja → se imprime el pedido pagado. */
+  const pinRelease = async (ticketNo, pin) => {
+    const o = await api('order:findAwaiting', ticketNo);
+    if (!o) throw new Error('No hay ningún pedido pendiente de pago con ese número.');
+    setBusy('Imprimiendo tu pedido…');
+    try {
+      const r = await api('order:release', o.orderNo, pin);
+      setResult({ ...r, paid: true }); setScreen('done');
+    } finally { setBusy(''); }
+  };
+
+  /** Mi galería (personal): solo las entradas de red que el administrador ha elegido. */
+  const openGallery = () => {
+    const allowed = galleryNetSources(settings);
+    if (!allowed.length) { toast({ type: 'error', text: 'No hay ninguna entrada de red para «Mi galería». Elígela en Ajustes → Fuentes de fotos.' }); return; }
+    start('prints', allowed[0], { netOnly: allowed });
+  };
+
   const hold = async (customer) => {
     setBusy('Guardando tu pedido…');
     try {
@@ -228,6 +263,8 @@ export default function App() {
   };
 
   if (!settings) return null;
+  // Letras elegidas en Administración → Letras (programa y títulos; los mensajes van aparte en la pantalla de espera).
+  applyFonts(settings.fonts);
   // Fotos de carnet: lotes nuevos; los pedidos antiguos por formato se siguen abriendo en su pantalla.
   const idScreen = idState?.people?.length ? 'id' : 'idlots';
   const issue = issues[0];
@@ -254,9 +291,9 @@ export default function App() {
 
   return (
     <>
-      {screen === 'home' && <Home settings={settings} onStart={start} onResume={resume} onAdmin={(pin) => { setAdminPin(pin); setScreen('admin'); }} />}
+      {screen === 'home' && <Home settings={settings} onStart={start} onResume={resume} onPinRelease={pinRelease} onGallery={openGallery} onAdmin={(pin) => { setAdminPin(pin); setScreen('admin'); }} />}
       {screen === 'sources' && (
-        <Sources session={session} settings={settings} flow={flow} roll={roll} initial={initialSource} onLoad={loadIntoRoll}
+        <Sources session={session} settings={settings} flow={flow} roll={roll} initial={netOnly ? netOnly[0] : initialSource} only={netOnly} onLoad={loadIntoRoll}
           backLabel={roll.length ? 'Volver a mis fotos' : 'Cancelar'}
           onBack={() => (roll.length ? setScreen(flow === 'id' ? idScreen : 'studio') : finish())}
           onNext={() => setScreen(flow === 'id' ? idScreen : 'studio')} />
@@ -280,9 +317,10 @@ export default function App() {
           onNext={(s) => { setSpec(s); setScreen('checkout'); }} />
       )}
       {screen === 'checkout' && spec && (
-        <Checkout settings={settings} spec={spec} orderOpts={orderOpts} onBack={() => setScreen(spec.kind === 'idlots' ? 'idlots' : spec.kind === 'id' ? 'id' : 'studio')}
-          onDone={(r) => { setResult(r); setScreen('done'); }} />
+        <Checkout settings={settings} spec={spec} roll={roll} orderOpts={orderOpts} onBack={() => setScreen(spec.kind === 'idlots' ? 'idlots' : spec.kind === 'id' ? 'id' : 'studio')}
+          onDone={(r) => { if (statRef.current) statRef.current.ordered = true; setResult(r); setScreen(r.awaiting ? 'await' : 'done'); }} />
       )}
+      {screen === 'await' && result && <AwaitPin result={result} settings={settings} onFinish={finish} onReleased={(r) => { setResult({ ...r, paid: true }); setScreen('done'); }} />}
       {screen === 'done' && result && <Done result={result} settings={settings} onFinish={finish} />}
       {screen === 'admin' && adminPin && (
         <Admin pin={adminPin} toast={toast} onExit={() => { setAdminPin(null); setScreen('home'); }}

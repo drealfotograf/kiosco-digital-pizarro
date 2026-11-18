@@ -2,13 +2,15 @@
 //   pedidos/<número>/originales/<idFoto>.<ext>   ← originales del cliente
 //   pedidos/<número>/pedido.json                 ← todos los ajustes elegidos (tamaño, copias, encuadre, filtros…)
 // Con eso el programa puede continuar, repetir (todo o parte) o reprocesar el pedido.
-// Estados: 'held' (sin terminar), 'sent' (enviado al servidor), 'printed' (impreso), 'error' (con error).
+// Estados: 'held' (sin terminar), 'awaiting' (pendiente de pago: espera el PIN de caja), 'sent' (enviado al servidor),
+// 'printed' (impreso), 'error' (con error), 'cancelled' (anulado en caja).
+// Las fotos se guardan 30 días salvo que el cliente pida borrarlas: entonces se borran al entregar el pedido.
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { dataDir, getSettings } from './config.js';
 
-export const STATUS_LABEL = { held: 'Sin terminar', sent: 'Enviado', printed: 'Impreso', error: 'Con error', processing: 'Procesando' };
+export const STATUS_LABEL = { held: 'Sin terminar', awaiting: 'Pendiente de pago', sent: 'Enviado', printed: 'Impreso', error: 'Con error', processing: 'Procesando', cancelled: 'Anulado' };
 const root = () => dataDir('pedidos');
 export const orderDir = (no) => path.join(root(), path.basename(String(no)));
 
@@ -69,11 +71,18 @@ export async function listOrders(status) {
     out.push({
       orderNo: o.orderNo, status: o.status, statusLabel: STATUS_LABEL[o.status] || o.status, error: o.error, kind: o.kind,
       destination: o.destination, customer: o.customer, total: o.total, currency: o.currency, code: o.code,
-      createdAt: o.createdAt, updatedAt: o.updatedAt, count: o.count,
-      thumbs: o.photos.slice(0, 4).map((p) => ph[p.id].src)
+      createdAt: o.createdAt, updatedAt: o.updatedAt, count: o.count, pin: o.status === 'awaiting' ? o.pin : undefined,
+      keepPhotos: o.keepPhotos !== false, photosDeleted: !!o.photosDeleted,
+      thumbs: o.photosDeleted ? [] : o.photos.slice(0, 4).map((p) => ph[p.id].src)
     });
   }
   return out.sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''));
+}
+
+/** Borra los originales de un pedido (el cliente no quiere que se guarden) y deja solo el registro. */
+export async function dropOriginals(no) {
+  await fsp.rm(path.join(orderDir(no), 'originales'), { recursive: true, force: true });
+  return updateOrder(no, { photosDeleted: true });
 }
 
 export async function deleteOrder(no) {

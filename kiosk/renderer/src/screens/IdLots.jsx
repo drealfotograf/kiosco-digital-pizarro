@@ -4,7 +4,7 @@ import CropEditor, { useBox } from '../components/CropEditor.jsx';
 import ThumbGrid from '../components/ThumbGrid.jsx';
 import LotPreview from '../components/LotPreview.jsx';
 import { ColorSliders } from '../components/ColorTools.jsx';
-import { defaultCropRot } from '../../../shared/layout.js';
+import { defaultCropRot, followCrop } from '../../../shared/layout.js';
 import { money, DEFAULT_ID_OPTIONS } from '../../../shared/presets.js';
 import { DEFAULT_ADJUST } from '../../../shared/color.js';
 
@@ -59,7 +59,7 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
   const type = types.find((t) => t.id === cur?.lotId) || settings.idLotTypes.find((t) => t.id === cur?.lotId);
   const photo = cur?.rollKey ? photoByKey[cur.rollKey] : null;
   const setCur = (patch) => setLots((all) => all.map((l) => (l.uid === curId ? { ...l, ...patch } : l)));
-  const hasBig = type?.kind === 'grid+big';
+  const hasBig = type?.kind === 'grid+big' && !type.bigFollows; // con bigFollows la grande copia el encuadre de las pequeñas
   const editBig = hasBig && part === 'big';
   const frame = type ? (editBig ? { w: type.big.w, h: type.big.h } : { w: type.pw, h: type.ph }) : null;
   const faceGuide = face && !editBig && type ? faceFor(settings, type.pw, type.ph) : null;
@@ -95,7 +95,9 @@ export default function IdLots({ settings, roll, ensurePhoto, lots, setLots, onB
       return {
         lotId: l.lotId, photoId: p.id, rollKey: l.rollKey, copies: Math.max(1, l.copies | 0), adjust: l.adjust, angle: l.angle || 0,
         crop: l.crop || defaultCropRot(p.w, p.h, t.pw / t.ph, l.angle || 0),
-        cropBig: t.kind === 'grid+big' ? l.cropBig || defaultCropRot(p.w, p.h, t.big.w / t.big.h, l.angle || 0) : null,
+        cropBig: t.kind !== 'grid+big' ? null
+          : t.bigFollows ? followCrop(l.crop || defaultCropRot(p.w, p.h, t.pw / t.ph, l.angle || 0), p.w, p.h, t.big.w / t.big.h, l.angle || 0)
+          : l.cropBig || defaultCropRot(p.w, p.h, t.big.w / t.big.h, l.angle || 0),
         guides: opts.allowGuides ? !!l.guides : false, border: opts.allowBorder ? !!l.border : false
       };
     })

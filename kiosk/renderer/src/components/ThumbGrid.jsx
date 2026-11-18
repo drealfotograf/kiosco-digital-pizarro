@@ -46,7 +46,7 @@ export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongP
           {onSelectAll && roll.length > 1 && <button className="btn sm" onClick={onSelectAll}><Icon name="checks" size={16} /> Seleccionar todas</button>}
         </div>
       </div>
-      <div className="tg-grid" ref={ref} style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }} onPointerMove={move}
+      <div className="tg-grid" ref={ref} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }} onPointerMove={move}
         onPointerLeave={() => { if (press.current) { clearTimeout(press.current.timer); press.current = null; } }}>
         {roll.map((e) => {
           const b = badges[e.key] || {};
@@ -54,17 +54,22 @@ export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongP
           return (
             <button key={e.key} className={`tg-item ${e.key === focusKey && !selecting ? 'focus' : ''} ${b.sizes?.length ? 'in' : ''} ${sel ? 'sel' : ''}`}
               onPointerDown={(ev) => down(ev, e)} onPointerUp={up} onContextMenu={(ev) => ev.preventDefault()}>
-              <img src={e.thumb} alt="" loading="lazy" draggable={false} />
-              {selecting && <span className="fs-check">{sel && <Icon name="check" size={16} />}</span>}
-              {b.virtual && <span className="tg-virtual" title="Copia virtual">CV</span>}
-              {b.warn && <span className="fs-warn" title="Calidad baja">!</span>}
-              {b.sizes?.length > 0 && (
-                <span className="tg-sizes">
-                  {b.sizes.map((s) => <span key={s.id} className="tg-dot" style={{ background: s.color }} title={`${s.qty} × ${s.name}`}>{s.qty}</span>)}
-                </span>
-              )}
-              {b.busy && <span className="fs-busy"><span className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} /></span>}
-              {cols <= 2 && <span className="tg-name">{e.name}</span>}
+              <span className="tg-img">
+                <img src={e.thumb} alt="" loading="lazy" draggable={false} />
+                {selecting && <span className="fs-check">{sel && <Icon name="check" size={16} />}</span>}
+                {b.virtual && <span className="tg-virtual" title="Copia virtual">CV</span>}
+                {b.warn && <span className="fs-warn" title="Calidad baja">!</span>}
+                {b.busy && <span className="fs-busy"><span className="spinner" style={{ width: 24, height: 24, borderWidth: 3 }} /></span>}
+              </span>
+              {/* Debajo: nombre y un punto de color por cada tamaño con copias */}
+              <span className="tg-cap">
+                <span className="tg-name">{e.name}</span>
+                {b.sizes?.length > 0 && (
+                  <span className="tg-dots">
+                    {b.sizes.map((x) => <span key={x.id} className="tg-dot" style={{ background: x.color }} title={`${x.qty} × ${x.name}`}>{cols <= 3 ? x.qty : ''}</span>)}
+                  </span>
+                )}
+              </span>
             </button>
           );
         })}

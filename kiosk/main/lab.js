@@ -31,7 +31,7 @@ export function exportRelPaths(orderNo, createdAt, files) {
 }
 
 /** Envío al servidor. Devuelve la confirmación del servidor (número de archivos guardados y ruta). */
-export async function sendToLab(record, files, rels) {
+export async function sendToLab(record, files, rels, dest) {
   const s = getSettings();
   const lab = s.lab;
   if (lab.mode === 'folder') {
@@ -49,7 +49,7 @@ export async function sendToLab(record, files, rels) {
   const url = lab.serverUrl.replace(/\/+$/, '') + '/api/orders';
   const form = new FormData();
   form.append('manifest', JSON.stringify(record));
-  form.append('dest', s.delivery?.serverFolder || '');
+  form.append('dest', dest || s.delivery?.serverFolder || '');
   form.append('paths', JSON.stringify(rels));
   for (const [i, f] of files.entries()) form.append('files', await fs.openAsBlob(f, { type: 'image/jpeg' }), path.basename(rels[i]));
   let res;
@@ -69,20 +69,20 @@ export async function sendToLab(record, files, rels) {
  * Envía al servidor y, si no responde, guarda el pedido en la ruta local alternativa para reintentarlo.
  * Devuelve { server: true, where, saved } o { server: false, local, reason }.
  */
-export async function sendOrDefer(record, files, rels) {
+export async function sendOrDefer(record, files, rels, dest) {
   try {
-    const r = await sendToLab(record, files, rels);
+    const r = await sendToLab(record, files, rels, dest);
     return { server: true, where: r.where, saved: r.saved };
   } catch (e) {
     const s = getSettings();
-    const root = path.join(s.delivery?.localFallback || 'C:\\KioscoPizarro\\Pendientes', clean(s.delivery?.serverFolder || 'Servidor'));
+    const root = path.join(s.delivery?.localFallback || 'C:\\KioscoPizarro\\Pendientes', clean(dest || s.delivery?.serverFolder || 'Servidor'));
     for (const [i, f] of files.entries()) {
       const dest = path.join(root, ...rels[i].split('/'));
       await fsp.mkdir(path.dirname(dest), { recursive: true });
       await fsp.copyFile(f, dest);
     }
     const dir = path.join(root, rels[0].split('/')[0]);
-    await fsp.writeFile(path.join(dir, 'pendiente.json'), JSON.stringify({ record, rels, reason: e.message, at: new Date().toISOString() }, null, 2));
+    await fsp.writeFile(path.join(dir, 'pendiente.json'), JSON.stringify({ record, rels, dest: dest || s.delivery?.serverFolder || '', reason: e.message, at: new Date().toISOString() }, null, 2));
     // Comprobación de la copia local.
     const ok = rels.every((r) => fs.existsSync(path.join(root, ...r.split('/'))));
     if (!ok) throw new Error(`No se pudo enviar al servidor (${e.message}) ni guardar la copia local en ${dir}`);
@@ -107,9 +107,9 @@ export async function retryPending(log = () => {}) {
         const marker = path.join(dir, 'pendiente.json');
         if (!fs.existsSync(marker)) continue;
         try {
-          const { record, rels } = JSON.parse(await fsp.readFile(marker, 'utf8'));
+          const { record, rels, dest: saved } = JSON.parse(await fsp.readFile(marker, 'utf8'));
           const files = rels.map((r) => path.join(destDir, ...r.split('/')));
-          await sendToLab(record, files, rels);
+          await sendToLab(record, files, rels, saved || dest);
           await fsp.rm(dir, { recursive: true, force: true });
           sent++;
           log(`Pedido ${record.orderNo} enviado al servidor desde la copia local`);

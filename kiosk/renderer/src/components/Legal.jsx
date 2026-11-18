@@ -11,7 +11,7 @@ export function LegalLink({ settings }) {
   return (
     <>
       <p className="legal-line">
-        Tus fotos solo se usan para tu pedido y se borran del kiosco al terminar.{' '}
+        Tus fotos solo se usan para tu pedido. Por seguridad, tu pedido se almacena durante {settings.ordersRetentionDays || 30} días por si necesitas más copias, salvo que solicites su borrado.{' '}
         <button className="link" onClick={() => setOpen(true)}>Protección de datos (RGPD) y aviso legal</button>
       </p>
       {open && <LegalModal settings={settings} onClose={() => setOpen(false)} />}
@@ -47,7 +47,7 @@ export function LegalModal({ settings, onClose }) {
             <h3>Cuánto tiempo las conservamos</h3>
             <ul>
               <li>Mientras usas el kiosco, tus fotos están en una sesión temporal que <b>se borra al terminar</b>, al cancelar o tras unos minutos sin actividad.</li>
-              <li>Las fotos de los pedidos realizados o guardados para después se conservan <b>{days} días</b> para poder repetirlos o corregirlos, y después se borran automáticamente.</li>
+              <li>Las fotos de los pedidos realizados o guardados para después se conservan <b>{days} días</b> para poder repetirlos o corregirlos, y después se borran automáticamente. <b>Si no quieres que se guarden</b>, desmarca «Guardar mis fotos» en el resumen del pedido: se borrarán en cuanto se entregue (queda solo el registro de la venta).</li>
               <li>Las galerías privadas se conservan mientras dure el encargo contratado con el estudio.</li>
             </ul>
             <h3>Quién más puede verlas</h3>

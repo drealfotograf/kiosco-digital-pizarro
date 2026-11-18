@@ -757,3 +757,21 @@ h1, h2, h3, .option h2, .topbar h1 { font-family: var(--font-head, inherit); }
 .bk-day { min-width: 46px; justify-content: center; }
 .st-total td { font-weight: 600; border-top: 2px solid var(--line); }
 .lot-uso { color: var(--olive); }
+
+/* Lotes de carnet: una pestaña por papel y tarjetas compactas */
+.paper-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border-radius: 16px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); flex-shrink: 0; }
+.paper-tabs button { border: 0; background: var(--surface-2); padding: 14px 20px; min-height: 64px; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font: inherit; color: var(--taupe); }
+.paper-tabs button b { font-size: 19px; font-weight: 600; }
+.paper-tabs button span { font-size: 13px; }
+.paper-tabs button.on { background: var(--navy); color: var(--cream); }
+.lot-admin { grid-template-columns: repeat(auto-fill, minmax(255px, 1fr)); gap: 10px; }
+.lot-card { gap: 6px; padding: 12px; }
+.lot-card .inp { min-height: 38px; font-size: 14px; padding: 6px 10px; }
+.lot-card .small, .lot-card .muted.small { font-size: 12px; }
+.lot-card .pchip { font-size: 11.5px; padding: 3px 8px; }
+.lot-card .btn.sm { min-height: 32px; font-size: 12.5px; }
+.lot-card .lot-preview { align-self: center; }
+.lot-admin { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); }
+.lot-card .lot-preview { height: auto; }
+.lot-uso { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lot-card select.inp { min-height: 36px; font-size: 13.5px; }

@@ -365,6 +365,8 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
   - **Impresora de los lotes:**
     - Se elige una para todos los lotes de un papel (`lotPrinters`) y, si se quiere, otra para un lote concreto (`lot.printers`).
     - Si no se elige ninguna, se usa la del tamaño de copia de ese papel.
+  - **Ajustes → Lotes de carnet con dos pestañas**, «Papel 10 x 15» y «Papel 15 x 20», con el número de lotes y cuántos se ofrecen. La pulsada ocupa toda la página.
+    - Tarjetas compactas: vista previa de 140 px de alto como máximo, impresora del lote en un desplegable y uso en 2 líneas.
   - **Pestaña «Formatos carnet» eliminada:** las guías de cara van ahora en cada lote.
   - **Pendiente:** unificar el formato del ticket y los códigos con las tarifas de Gestión Pizarro (el cliente dirá dónde están).
   - **Migración de ajustes (schema 5):** añade los lotes nuevos que falten.

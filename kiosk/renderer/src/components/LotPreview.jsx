@@ -8,9 +8,11 @@ import { svgMatrixValues } from '../../../shared/color.js';
  * Sin foto: solo los huecos. Con foto: la misma foto en cada hueco (el hueco grande con su propio encuadre),
  * más marcas de corte y/o marco fino si están activados.
  */
-export default function LotPreview({ lot, photo, entry = {}, width = 260, src }) {
+export default function LotPreview({ lot, photo, entry = {}, width: maxW = 260, maxH, src }) {
   const fid = 'lp' + useId().replace(/[^a-z0-9]/gi, '');
   const L = lotSlots(lot);
+  // Con maxH, las hojas en vertical se reducen para no ocupar demasiado alto.
+  const width = maxH ? Math.min(maxW, (maxH * L.sheetW) / L.sheetH) : maxW;
   const lines = entry.guides ? slotGuides(L.slots) : [];
   const url = photo && (src || fileUrl(photo.thumb));
   const ang = entry.angle || 0;

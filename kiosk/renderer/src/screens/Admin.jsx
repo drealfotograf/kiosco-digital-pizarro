@@ -29,6 +29,7 @@ function TierInput({ value, onChange }) {
 export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
   const [pin, setPin] = useState(initialPin);
   const [tab, setTab] = useState('orders');
+  const [lotPaperTab, setLotPaperTab] = useState('10x15'); // Lotes de carnet: pestaña de papel abierta
   const [s, setS] = useState(null);
   const [printers, setPrinters] = useState([]);
   const [masks, setMasks] = useState([]);
@@ -102,12 +103,23 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                 }}>Cargar plantillas</button>
                 {dirty && <span className="muted small">Guarda los cambios antes de exportar o cargar</span>}
               </div>
-              {['10x15', '15x20'].map((paper) => {
+              {/* Una pestaña por papel; la elegida ocupa toda la página */}
+              <div className="paper-tabs">
+                {['10x15', '15x20'].map((p) => {
+                  const n = (s.idLotTypes || []).filter((l) => (l.paper || '10x15') === p);
+                  return (
+                    <button key={p} className={lotPaperTab === p ? 'on' : ''} onClick={() => setLotPaperTab(p)}>
+                      <b>Papel {p === '15x20' ? '15 x 20' : '10 x 15'}</b>
+                      <span>{n.length} lotes · {n.filter((l) => l.enabled !== false).length} ofrecidos</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {[lotPaperTab].map((paper) => {
                 const lp = s.lotPrinters?.[paper] || [];
                 const label = paper === '15x20' ? '15 x 20' : '10 x 15';
                 return (
                   <div key={paper} className="col" style={{ gap: 10 }}>
-                    <h3 style={{ margin: '8px 0 0' }}>Papel {label}</h3>
                     <div className="card col" style={{ gap: 6 }}>
                       <span className="small"><b>Impresora de todos los lotes {label}</b> <span className="muted">(si no marcas ninguna, la del tamaño de copia {label} en «Impresoras»)</span></span>
                       <div className="row" style={{ gap: 4 }}>{printers.map((p) => {
@@ -118,19 +130,19 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                     <div className="lot-admin">
                       {(s.idLotTypes || []).map((l, i) => ((l.paper || '10x15') !== paper ? null : (
                   <div key={l.id} className={`card col lot-card ${l.enabled === false ? 'off' : ''}`}>
-                    <LotPreview lot={l} entry={{ guides: s.idOptions?.guides, border: s.idOptions?.border }} width={300} />
+                    <LotPreview lot={l} entry={{ guides: s.idOptions?.guides, border: s.idOptions?.border }} width={220} maxH={140} />
                     <label className="row" style={{ gap: 8 }}><input type="checkbox" checked={l.enabled !== false} onChange={(e) => listEdit('idLotTypes', i, 'enabled', e.target.checked)} style={{ width: 24, height: 24 }} />Ofrecer en el kiosco</label>
                     <input className="inp" value={l.name} onChange={(e) => listEdit('idLotTypes', i, 'name', e.target.value)} />
                     <div className="row" style={{ flexWrap: 'nowrap' }}><span className="muted small" style={{ flex: 1 }}>Código en Gestión</span><input className="inp" style={{ width: 150 }} value={l.code || ''} placeholder={`CARNET-${l.id}`} onChange={(e) => listEdit('idLotTypes', i, 'code', e.target.value.trim())} /></div>
                     <div className="row" style={{ flexWrap: 'nowrap' }}><span className="muted small" style={{ flex: 1 }}>Precio por lote</span><input className="inp" type="number" step="0.5" style={{ width: 110 }} value={l.price} onChange={(e) => listEdit('idLotTypes', i, 'price', Number(e.target.value))} /></div>
-                    {l.uso && <span className="small lot-uso">Uso habitual: {l.uso} <span className="muted">(solo lo ve el personal)</span></span>}
-                    <div className="col" style={{ gap: 4 }}>
-                      <span className="small"><b>Impresora de este lote</b> <span className="muted">(si no marcas ninguna, la de su papel)</span></span>
-                      <div className="row" style={{ gap: 4 }}>{printers.map((p) => {
-                        const on = (l.printers || []).includes(p.name);
-                        return <span key={p.name} className={`pchip ${on ? 'on' : ''}`} onClick={() => listEdit('idLotTypes', i, 'printers', on ? l.printers.filter((x) => x !== p.name) : [...(l.printers || []), p.name])}>{p.displayName}</span>;
-                      })}</div>
-                    </div>
+                    {l.uso && <span className="small lot-uso" title={`${l.uso} (solo lo ve el personal)`}>Uso: {l.uso}</span>}
+                    <label className="col" style={{ gap: 2 }}>
+                      <span className="small"><b>Impresora de este lote</b></span>
+                      <select className="inp" value={(l.printers || [])[0] || ''} onChange={(e) => listEdit('idLotTypes', i, 'printers', e.target.value ? [e.target.value] : [])}>
+                        <option value="">La de su papel</option>
+                        {printers.map((p) => <option key={p.name} value={p.name}>{p.displayName}</option>)}
+                      </select>
+                    </label>
                     <span className="muted small">{l.kind === 'grid+big' ? `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm + 1 de ${l.big.w}x${l.big.h} mm${l.bigFollows ? ' (mismo encuadre)' : ''}` : `${l.cols * l.rows} fotos ${l.pw}x${l.ph} mm`} · papel {l.landscape === false ? 'vertical' : 'horizontal'}</span>
                     <button className="btn sm danger" style={{ alignSelf: 'flex-start' }} onClick={() => set('idLotTypes', s.idLotTypes.filter((_, j) => j !== i))}><Icon name="trash" size={16} /> Quitar plantilla</button>
                   </div>

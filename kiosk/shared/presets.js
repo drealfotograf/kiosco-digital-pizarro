@@ -71,9 +71,9 @@ export const DEFAULT_ID_LOTS = [
 // ---------- Formatos de archivo ----------
 // RAW de cámara: se imprime la vista previa JPEG a tamaño completo que la cámara guarda dentro del archivo.
 export const RAW_EXT = ['.dng', '.cr2', '.cr3', '.crw', '.nef', '.nrw', '.arw', '.srf', '.sr2', '.orf', '.rw2', '.raf', '.pef', '.srw', '.3fr', '.erf', '.kdc', '.mrw', '.mef', '.iiq', '.rwl', '.x3f'];
-export const SUPPORTED_EXT = ['.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.heic', '.heif', '.avif', '.gif', '.pdf', '.tif', '.tiff', ...RAW_EXT];
+export const SUPPORTED_EXT = ['.jpg', '.jpeg', '.jpe', '.jfif', '.png', '.webp', '.heic', '.heif', '.avif', '.gif', '.pdf', '.tif', '.tiff', '.jxl', '.psd', ...RAW_EXT];
 export const VIDEO_EXT = ['.mp4', '.mov', '.avi', '.mkv', '.3gp', '.m4v', '.wmv', '.webm', '.mts', '.m2ts', '.flv', '.mpg', '.mpeg', '.hevc'];
-export const SUPPORTED_LABEL = 'JPEG, PNG, WEBP, HEIC, HEIF, AVIF, GIF, TIFF, PDF y RAW de cámara';
+export const SUPPORTED_LABEL = 'JPEG, PNG, WEBP, HEIC, HEIF, AVIF, GIF, TIFF, JPEG XL, PSD, PDF y RAW de cámara';
 
 export const extOf = (name) => { const m = /\.[^.\\/]+$/.exec(String(name || '')); return m ? m[0].toLowerCase() : ''; };
 

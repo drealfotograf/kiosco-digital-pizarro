@@ -6,7 +6,7 @@ const call = async (ch, ...args) => {
   return r.data;
 };
 
-const channels = ['session', 'drives', 'phone-progress', 'email-status', 'order-progress', 'toast', 'settings', 'import-issue', 'roll-add'];
+const channels = ['session', 'drives', 'phone-progress', 'email-status', 'order-progress', 'toast', 'settings', 'import-issue', 'roll-add', 'print:retry', 'print:retry-ok', 'print:failed', 'print:queue'];
 
 contextBridge.exposeInMainWorld('kiosk', {
   call,

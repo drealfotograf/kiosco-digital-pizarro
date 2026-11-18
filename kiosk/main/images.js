@@ -37,7 +37,13 @@ export async function checkContent(file) {
     // TIFF y la mayoría de RAW (DNG, CR2, NEF, ARW, PEF…) son TIFF por dentro; ORF, RW2, RAF y CR3 tienen firma propia.
     const tiff = head4 === 'II*\0' || head4 === 'MM\0*';
     const raw = RAW_EXT.includes(ext) && (tiff || ['IIRO', 'IIRS', 'IIU\0', 'MMOR'].includes(head4) || b.toString('ascii', 0, 8) === 'FUJIFILM' || brand === 'crx ' || b.toString('ascii', 0, 4) === 'FOVb');
-    const kind = raw ? 'raw' : jpeg ? 'jpeg' : png ? 'png' : webp ? 'webp' : heif ? 'heif' : gif ? 'gif' : pdf ? 'pdf' : tiff ? 'tiff' : brand ? 'video' : '';
+    // JPEG XL: firma de contenedor (12 bytes) o codestream desnudo (0xFF 0x0A).
+    const jxlBox = b[0] === 0x00 && b[1] === 0x00 && b[2] === 0x00 && b[3] === 0x0C && b.toString('ascii', 4, 8) === 'JXL ';
+    const jxlNaked = b[0] === 0xFF && b[1] === 0x0A;
+    const jxl = jxlBox || jxlNaked;
+    // PSD (Photoshop): firma «8BPS».
+    const psd = b.toString('ascii', 0, 4) === '8BPS';
+    const kind = raw ? 'raw' : jpeg ? 'jpeg' : png ? 'png' : webp ? 'webp' : heif ? 'heif' : gif ? 'gif' : pdf ? 'pdf' : tiff ? 'tiff' : jxl ? 'jxl' : psd ? 'psd' : brand ? 'video' : '';
     if (kind === 'video') return `Aunque se llama ${ext}, el archivo es un vídeo o un formato no compatible.`;
     if (!kind) return 'El archivo está dañado o no es una imagen válida.';
     return null; // La extensión puede no coincidir (p. ej. .jpg que es PNG): se acepta porque la imagen es válida.
@@ -61,6 +67,21 @@ export async function readable(src, outDir, page = 1) {
     const out = path.join(outDir, crypto.createHash('sha1').update(`${src}|${st.size}|${st.mtimeMs}`).digest('hex').slice(0, 12) + `-${path.basename(src, path.extname(src))}-p${page}.png`);
     if (!fs.existsSync(out)) await fsp.writeFile(out, await renderPdfPage(src, page, 300));
     return out;
+  }
+  // PSD: sharp/libvips puede leer la capa aplanada; si falla, buscamos la vista previa JPEG incrustada.
+  if (extOf(src) === '.psd') {
+    await fsp.mkdir(outDir, { recursive: true });
+    const st = await fsp.stat(src);
+    const out = path.join(outDir, crypto.createHash('sha1').update(`${src}|${st.size}|${st.mtimeMs}`).digest('hex').slice(0, 12) + `-${path.basename(src, '.psd')}.jpg`);
+    if (fs.existsSync(out)) return out;
+    try {
+      // Intenta leer el PSD directamente (libvips soporta algunos PSD aplanados).
+      await sharp(src, { failOn: 'none' }).rotate().jpeg({ quality: 97, chromaSubsampling: '4:4:4' }).toFile(out);
+      const m = await sharp(out).metadata();
+      if (m.width >= 100 && m.height >= 100) return out;
+    } catch { /* sharp no puede: extraemos la vista previa JPEG como en RAW */ }
+    try { await extractRawPreview(src, out); return out; } catch { /* sin JPEG incrustado */ }
+    throw new Error('No se ha podido leer el archivo PSD. Prueba a guardarlo como JPEG o TIFF desde Photoshop.');
   }
   if (!isHeic(src)) return src;
   await fsp.mkdir(outDir, { recursive: true });

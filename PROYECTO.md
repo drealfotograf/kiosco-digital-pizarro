@@ -384,6 +384,28 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
       - «Cargar perfiles ICC…»: comprueba que sean perfiles ICC RGB de impresora. También se listan los instalados en Windows; los de pantalla quedan descartados.
       - «Imprimir carta de color» de prueba.
     - El contador real de la DS620 (papel y cinta) necesitaría las herramientas de DNP; queda como mejora.
+  - **Inicio:** vuelven «Impresión fotográfica» y «Tus recuerdos, impresos hoy.», y bajo el logotipo se añade «Capturando tus mejores recuerdos desde 1986».
+  - **Selección: copias con un selector grande, entre los tamaños y el encuadre:**
+    - Botones de 62 px, táctiles.
+    - Empieza en 0: con 1 o más el tamaño entra solo en el pedido, y con 0 sale.
+    - Se quita el botón «Añadir».
+  - **Encuadre:**
+    - «Girar», «Centrar» y «Restaurar» son botones grandes, de 50 px, con icono.
+    - **Borde:** al pulsar el número (5 mm) se abre un selector con − y +, y con 3, 5, 8 y 10 mm.
+    - Con el borde activado se pueden añadir esquinas redondeadas («Curvo», radio de 3 mm) y un marco negro fino de 0,3 mm alrededor de la foto («Marco»). Se ven en la vista previa y se imprimen (`roundCorners`, `frameLine`).
+  - **Importar:** al abrir una carpeta (USB o tarjeta, carpeta de red, carpeta del servidor) se ven sus fotos en miniatura (`FilePicker`).
+    - Al tocarlas se marcan o desmarcan; hay «Seleccionar todas».
+    - Botones: «Importar seleccionadas (N)», «Todas (N)» y «Todas + subcarpetas» (si hay).
+    - Se avisa de los archivos no compatibles. Se muestran 120 y luego «Ver más».
+  - **Responsiva** (la referencia sigue siendo 1920x1080, sin cambios a ese tamaño):
+    - **Menos de 1900 px de ancho:** la barra de opciones pasa a dos filas y el panel de miniaturas se ajusta.
+    - **1440 px o menos:** márgenes y columnas más estrechos (fuentes, ajustes, carnet, resumen…).
+    - **1100 px o menos:** el menú de ajustes y la lista de fuentes pasan arriba, en horizontal.
+    - **En vertical:** el inicio va en una columna, la foto queda arriba con las miniaturas debajo, y el carnet se reparte en dos columnas.
+  - **Ajustes → Letras → Tamaño:** la letra (`fonts.fontScale`) y los menús (`fonts.menuScale`) se ajustan por separado, del 70 % al 160 %, y se ven al momento.
+    - La letra escala todos los `font-size` de la hoja de estilos (`calc(... * var(--fs))`).
+    - Los menús amplían con `zoom` las barras, botones, pestañas y el teclado táctil.
+    - Si la barra inferior no cabe, se desplaza, pero el total y «Continuar» quedan fijos a la derecha.
   - **Pendiente:** unificar el formato del ticket y los códigos con las tarifas de Gestión Pizarro (el cliente dirá dónde están).
   - **Migración de ajustes (schema 5):** añade los lotes nuevos que falten.
   - **Migración de ajustes (schema 4):** las instalaciones existentes reciben las Polaroid y los lotes nuevos, y la Polaroid 10x10 antigua pasa a 8,5x8,5.
@@ -466,6 +488,15 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
     - Administración: envío y lotes.
     - Migración desde ajustes antiguos.
 
+- [x] **Mejoras de interfaz (18/11/2026):**
+  - Ticket con logo de empresa, NIF/razón social y vista previa en Administración.
+  - Cola de impresión visible con barra de progreso y estado por trabajo.
+  - Pantalla de inicio con eslóganes animados (5 textos × 5 efectos, rotación cada 15 s), datos de contacto y layout ajustado.
+  - Modo oscuro completo con paleta `[data-theme="dark"]`.
+  - Recorte facial automático para carnet (`faceCrop`).
+  - Vista previa de impresión (simulación a escala del papel con borde, Polaroid y recorte).
+  - Vista cuadrícula a pantalla completa para las miniaturas.
+
 ### Pendiente
 - [ ] **Elegir la carpeta del servidor para las copias de seguridad** (Ajustes → Copia de seguridad). Sin ella no se hacen copias.
 - [ ] **Unificar el ticket con Gestión Pizarro** cuando el cliente indique dónde están sus tarifas (códigos de artículo y formato de líneas), y conectar Gestión a la API de tickets.
@@ -483,7 +514,6 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 
 ## 5. Próximos pasos
 - **Seguridad y normativa (revisión del 17/11/2026):** ver el informe de la sesión. Lo urgente: rellenar los datos legales, cambiar el PIN 1234 y la contraseña del servidor, restringir el puerto 4000 a la red de la tienda en el firewall, y firmar el contrato de encargado del tratamiento si el laboratorio es de otra empresa.
-0. Valorar, para orígenes con miles de fotos, una vista de cuadrícula a pantalla completa además de la tira inferior.
 1. Configurar las impresoras reales en Administración → Tamaños e impresoras y hacer impresiones de prueba.
 2. Prueba en la tienda con móviles reales (WiFi QR, cable y Bluetooth) y con el correo.
 3. Igualar el estilo del panel web del servidor.
@@ -728,3 +758,47 @@ cd kiosk && npm install && npm start
     - Contador del rollo 6x8".
     - Aviso por correo una sola vez.
     - Iconos y panel a 1920x1080.
+- **Inicio:** lema recuperado y «Capturando tus mejores recuerdos desde 1986».
+- **Selección:** selector de copias grande (0 por defecto, añade o quita el tamaño solo).
+- **Ajustes:** tamaño de letra y de menús por separado.
+- **Probado a 1920x1080:**
+  - Con 1 copia el tamaño entra y con 0 sale.
+  - Botones de 62 px.
+  - Letra al 120 % y menús al 110 % guardados y aplicados.
+- **Encuadre:**
+  - Botones grandes.
+  - Borde con mm editables al pulsar el número, esquinas curvas y marco negro.
+  - Probado en la copia impresa (esquina, marco y borde) y en pantalla a 1920x1080, sin desplazamiento.
+- **Importar:** ver los archivos de la carpeta y elegir (seleccionadas, todas o con subcarpetas).
+- **Interfaz responsiva.**
+- **Probado:**
+  - Importar 3 seleccionadas de 8.
+  - Selección, inicio y ajustes a 1920x1080, 1366x768, 1280x1024, 1024x768 y 1080x1920 (vertical): sin salirse de la pantalla y con «Continuar» siempre visible.
+- **5 tamaños + «Más tamaños», color del margen, Ajustar en 2 columnas y Rotar 90°:**
+  - Solo 5 tamaños a la vista; el resto, en «Más tamaños».
+  - Al editar el borde: selector de color del margen (blanco, negro, crema, azul, gris y multicolor).
+  - Sección «Ajustar» en 2 columnas verticales: Girar, Centrar, Rotar (90° sin cambiar el papel) y Restaurar.
+  - Ningún menú se pisa (comprobado a 1920, 1366, 1280 y 1080).
+- **Probado:** tests automatizados pasan en las 4 resoluciones, capturas correctas.
+
+### 18/11/2026 · Formatos, reimpresión automática y mejoras
+- **Formatos ampliados:** JPEG XL (.jxl) y PSD (.psd). TIFF ya se aceptaba.
+  - JXL: firma de contenedor y de codestream desnudo.
+  - PSD: lectura directa por sharp/libvips; si falla, extracción de la vista previa JPEG incrustada (como en RAW).
+- **Reimpresión automática:** si la impresora falla (sin papel, sin tinta, error mecánico), se reintenta la foto que se estaba imprimiendo hasta 3 veces con pausa creciente (8 s, 20 s, 40 s). Se avisa al personal con un toast en pantalla. Para no perder fotos.
+- **Sugerencias de mejora pendientes de decidir con el cliente:** ver la lista entregada.
+
+### 18/11/2026 · Mejoras de interfaz, ticket, modo oscuro y más
+- **Ticket:**
+  - Datos legales del titular (NIF, razón social) si están rellenados en Ajustes → General → Legal.
+  - Logo de la empresa en la cabecera del ticket (subir imagen en Ajustes → Ticket).
+  - Vista previa del ticket en Administración (componente `TicketPreview`).
+- **Cola de impresión visible:** componente `PrintQueue` con barra de progreso y estado por trabajo (en cola, imprimiendo, reintentando, listo, error). Canal IPC `print:queue` con difusión a todas las ventanas.
+- **Pantalla de inicio:**
+  - 5 eslóganes rotativos cada 15 s con efectos de animación (zoom, paneo, rotación). Clases `home-pan-a` a `home-pan-e`.
+  - Datos de contacto (teléfono, email) desde `settings.legal`.
+  - Logo y leyenda ligeramente más arriba.
+- **Modo oscuro:** paleta completa bajo `[data-theme="dark"]` en CSS; interruptor en Administración.
+- **Recorte facial (carnet):** función `faceCrop` en `layout.js`, desplaza el encuadre un 12% hacia la cara.
+- **Vista previa de impresión:** botón «Vista previa» junto a «Continuar» en la zona de selección. Modal con simulación a escala del papel, borde, Polaroid y recorte.
+- **Vista cuadrícula completa:** botón en las miniaturas para expandir la cuadrícula a toda la zona central (útil con cientos de fotos). Al tocar una foto se vuelve a la vista normal.

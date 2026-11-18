@@ -11,6 +11,16 @@ export function defaultCrop(imgW, imgH, aspect) {
   return { x: 0, y: (1 - h) / 2, w: 1, h };
 }
 
+/** Recorte automático para carnet: desplaza el encuadre hacia la zona superior donde se espera la cara. */
+export function faceCrop(imgW, imgH, aspect) {
+  const c = defaultCrop(imgW, imgH, aspect);
+  if (c.h < 1) {
+    const shift = c.h * 0.12;
+    c.y = Math.max(0, c.y - shift);
+  }
+  return c;
+}
+
 export function clampCrop(c) {
   const w = Math.min(1, Math.max(0.02, c.w));
   const h = Math.min(1, Math.max(0.02, c.h));

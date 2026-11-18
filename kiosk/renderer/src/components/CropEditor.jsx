@@ -32,8 +32,10 @@ const clampFit = (f) => ({ s: Math.min(4, Math.max(0.15, f.s)), dx: Math.min(1, 
  * frame: {w,h} mm de la ventana de la foto. sheet (opcional): { w, h, win:{x,y,w,h}, color } para mostrar
  * el papel completo (borde o Polaroid) con la ventana dentro. overlay: función (W,H) → capa de texto/dibujo.
  */
-export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false, onModeChange }) {
+export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle: straight = 0, rot: rot90 = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false, onModeChange }) {
   const [boxRef, box] = useBox();
+  // Giro total = rotación de 90° de la imagen («Rotar») + enderezado fino (±45°, el deslizador).
+  const angle = (Number(rot90) || 0) + (Number(straight) || 0);
   const fid = 'c' + useId().replace(/[^a-z0-9]/gi, '');
   const aspect = frame.w / frame.h;
   const sliders = showSlider ? 2 * 36 : 0;
@@ -102,7 +104,7 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
     if (lockGestures) return;
     e.currentTarget.setPointerCapture(e.pointerId);
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
-    start.current = { crop: c, fit: f, angle, mode, z: zOf(live.current), pts: new Map(pointers.current) };
+    start.current = { crop: c, fit: f, angle: straight, mode, z: zOf(live.current), pts: new Map(pointers.current) };
   };
   const onMove = (e) => {
     if (!pointers.current.has(e.pointerId) || !start.current) return;
@@ -119,7 +121,7 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
       if (onAngle) setAngle(nextAngle);
       const factor = d(pts[0], pts[1]) / Math.max(1, d(p0[0], p0[1]));
       if (onModeChange) applyZ(live.current, s0.z * factor);
-      else if (mode === 'fill') commit(zoomCrop(s0.crop, factor), onAngle ? nextAngle : angle);
+      else if (mode === 'fill') commit(zoomCrop(s0.crop, factor), onAngle ? nextAngle + (Number(rot90) || 0) : angle);
       else commitFit({ ...s0.fit, s: s0.fit.s * factor });
     } else if (pts.length === 1 && p0.length === 1) {
       const dx = pts[0].x - p0[0].x, dy = pts[0].y - p0[0].y;
@@ -135,7 +137,7 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
   };
   const onUp = (e) => {
     pointers.current.delete(e.pointerId);
-    start.current = pointers.current.size ? { crop: c, fit: f, angle, mode, z: zOf(live.current), pts: new Map(pointers.current) } : null;
+    start.current = pointers.current.size ? { crop: c, fit: f, angle: straight, mode, z: zOf(live.current), pts: new Map(pointers.current) } : null;
   };
   const onWheel = (e) => {
     if (lockGestures) return;
@@ -167,7 +169,7 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
           </div>
         )}
         {sheet && <div className="crop-sheet" style={{ width: SW, height: SH, background: sh.color || '#ffffff' }} />}
-        <div className="cropper" style={{ position: 'absolute', left: WX, top: WY, width: W, height: H, background: mode === 'fit' ? bg : '#0b1d30' }}>
+        <div className={`cropper ${sheet?.frameLine ? 'framed' : ''}`} style={{ position: 'absolute', left: WX, top: WY, width: W, height: H, background: mode === 'fit' ? bg : '#0b1d30', borderRadius: sheet?.radius ? sheet.radius * sc : 0, overflow: 'hidden', ...(sheet?.frameLine ? { boxShadow: `0 0 0 ${Math.max(1, 0.3 * sc)}px #000` } : {}) }}>
           {mode === 'fit' ? <img src={url} alt="" style={fitStyle} /> : <img src={url} alt="" style={fillStyle} />}
           {mask && <MaskOverlay src={mask} frame={frame} />}
           <svg className="guides" viewBox={`0 0 ${frame.w} ${frame.h}`} preserveAspectRatio="none">
@@ -196,8 +198,8 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
           {onAngle && (
             <div className="angle-row" style={dark ? null : { color: 'var(--taupe)' }}>
               <span>Enderezar</span>
-              <input type="range" min={-MAX_ANGLE} max={MAX_ANGLE} step="0.1" value={angle} onChange={(e) => setAngle(Number(e.target.value))} onDoubleClick={() => setAngle(0)} />
-              <button className="btn sm ghost" style={{ minHeight: 32, color: 'inherit' }} onClick={() => setAngle(0)}>{angle ? `${angle > 0 ? '+' : ''}${angle.toFixed(1)}° ✕` : '0°'}</button>
+              <input type="range" min={-MAX_ANGLE} max={MAX_ANGLE} step="0.1" value={straight} onChange={(e) => setAngle(Number(e.target.value))} onDoubleClick={() => setAngle(0)} />
+              <button className="btn sm ghost" style={{ minHeight: 32, color: 'inherit' }} onClick={() => setAngle(0)}>{straight ? `${straight > 0 ? '+' : ''}${straight.toFixed(1)}° ✕` : '0°'}</button>
             </div>
           )}
         </div>

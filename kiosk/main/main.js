@@ -16,7 +16,7 @@ import { startEmailWatch, stopEmailWatch, emailStatus, testEmail } from './sourc
 import { openBluetoothReceiver, bluetoothInbox, recentBluetoothFiles } from './sources/bluetooth.js';
 import { listServerShare, downloadServerFile } from './sources/srvshare.js';
 import { ensureSampleMasks, renderPhotoBuffer, saveJpeg } from './render.js';
-import { listPrinters, testPrint, simFolder, enqueuePrint } from './print.js';
+import { listPrinters, testPrint, simFolder, enqueuePrint, getPrintQueue } from './print.js';
 import { MEDIA, mediaStatus, changeRoll, listProfiles, importProfiles, setPrinterColor } from './printers.js';
 import { submitOrder, quote, printableSizes, holdOrder, repeatOrder, retryOrder, releaseOrder, findAwaiting, pollTickets, orderState } from './orders.js';
 import { retryTickets } from './ticket.js';
@@ -462,6 +462,7 @@ function registerIpc() {
 
   // Pedidos del cliente
   handle('printers:list', () => listPrinters());
+  handle('print:queue', () => getPrintQueue());
   handle('order:quote', (spec) => quote(spec));
   handle('order:printable', () => printableSizes());
   // Aviso discreto en el inicio: impresoras con poco papel o sin papel (sin más datos).

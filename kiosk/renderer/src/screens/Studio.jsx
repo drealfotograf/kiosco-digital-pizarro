@@ -15,7 +15,7 @@ const newKey = () => `i${Date.now().toString(36)}${++seq}`;
 const SWATCHES = ['#ffffff', '#000000', '#F6F2EA', '#C9B29A', '#0F2740', '#333333'];
 export const DEFAULT_EDIT = {
   adjust: { ...DEFAULT_ADJUST }, angle: 0, mask: '', mode: 'fill', bg: '#ffffff',
-  crops: {}, fits: {}, land: {}, border: false, borderMm: 5, borderColor: '#ffffff', overlay: { texts: [], strokes: [] }
+  crops: {}, fits: {}, land: {}, border: false, borderMm: 5, borderColor: '#ffffff', roundCorners: false, frameLine: false, rot: 0, overlay: { texts: [], strokes: [] }
 };
 
 /** Total con tarifas por tramos (la cantidad total de cada tamaño decide el precio unitario). */
@@ -27,7 +27,8 @@ export function itemsTotal(items, sizes) {
 
 /** Ajustes de una foto ya combinados con los valores por defecto. */
 export const editOf = (edits, key) => ({ ...DEFAULT_EDIT, ...(edits[key] || {}) });
-export const landOf = (ed, size, photo) => (size?.card ? false : ed.land[size?.id] ?? (photo ? photo.w > photo.h : false));
+// Orientación del papel: la elegida o, si no, la de la foto (teniendo en cuenta si se ha rotado 90°).
+export const landOf = (ed, size, photo) => (size?.card ? false : ed.land[size?.id] ?? (photo ? (((ed.rot || 0) % 180 === 90) ? photo.h > photo.w : photo.w > photo.h) : false));
 export const layoutOf = (ed, size, photo) => printLayout(size, landOf(ed, size, photo), ed.border ? ed.borderMm : 0);
 
 export function itemQuality(sizeId, ed, photo, sizes) {
@@ -51,7 +52,8 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
     const q = (settings.quickSizes || []).filter((id) => sizeById(id));
     const base = q.length ? q : sizes.slice(0, 6).map((s) => s.id);
     // Las Polaroid aparecen junto a 10x15 si existen y no están ya en la lista.
-    return [...base, ...sizes.filter((s) => s.card && !base.includes(s.id)).map((s) => s.id)].slice(0, 9);
+    // 5 tamaños a la vista; el resto, en «Más tamaños».
+    return [...base, ...sizes.filter((s) => s.card && !base.includes(s.id)).map((s) => s.id)].slice(0, 5);
   });
   const [masks, setMasks] = useState([]);
   const [focusKey, setFocusKey] = useState(() => items[0]?.rollKey || roll[0]?.key);
@@ -67,6 +69,8 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
   const [textStyle, setTextStyle] = useState({ font: 'mano', color: '#333333', size: 0.07 });
   const [selText, setSelText] = useState(null);
   const [textDraft, setTextDraft] = useState(null); // { pos, value, editId }
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [gridExpanded, setGridExpanded] = useState(false);
   const [stageRef, stage] = useBox();
 
   useEffect(() => { api('masks:list').then(setMasks); }, []);
@@ -81,7 +85,9 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
   const L = photo ? layoutOf(ed, curSize, photo) : null;
   const frame = L ? { w: L.win.w, h: L.win.h } : null;
   const showSheet = L && (L.polaroid || ed.border);
-  const sheet = showSheet ? { w: L.card.w, h: L.card.h, win: L.win, color: L.polaroid ? '#ffffff' : ed.borderColor, cardH: L.card.h } : null;
+  const sheet = showSheet ? { w: L.card.w, h: L.card.h, win: L.win, color: L.polaroid ? '#ffffff' : ed.borderColor, cardH: L.card.h,
+    radius: !L.polaroid && ed.border && ed.roundCorners ? 3 : 0, frameLine: !L.polaroid && ed.border && ed.frameLine } : null;
+  const [borderPop, setBorderPop] = useState(false); // cambiar los mm del borde al pulsar el número
   const maskPath = (name) => masks.find((m) => m.name === name)?.path;
   const q = photo ? itemQuality(curSize.id, ed, photo, sizes) : null;
   const rec = photo ? recommendSize(photo, sizes.filter((s) => !s.card)) : null;
@@ -228,14 +234,14 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
       </div>
 
       <div className="studio2-body">
-        <div className="stage" ref={stageRef}>
+        {!gridExpanded && <div className="stage" ref={stageRef}>
           {entry && photo && frame && (
             <CropEditor
               key={focusKey + curSize.id + (ed.border ? 'b' : '')}
               photo={photo} frame={frame} sheet={sheet}
               crop={ed.crops[curSize.id]} onChange={(c) => setEdit(focusKey, { crops: { ...ed.crops, [curSize.id]: c } })}
               fit={ed.fits[curSize.id]} onFit={(v) => setEdit(focusKey, { fits: { ...ed.fits, [curSize.id]: v } })}
-              angle={ed.angle} onAngle={(a) => setEdit(focusKey, { angle: a })}
+              angle={ed.angle} rot={ed.rot || 0} onAngle={(a) => setEdit(focusKey, { angle: a })}
               mode={ed.mode} bg={ed.bg} adjust={ed.adjust} mask={maskPath(ed.mask)}
               maxW={Math.max(200, stage.w - 150)} maxH={Math.max(200, stage.h - 40)}
               lockGestures={!!tool}
@@ -263,12 +269,12 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
             <button className="stage-nav right" onClick={() => { const i = roll.findIndex((e) => e.key === focusKey); setFocusKey(roll[(i + 1) % roll.length].key); }} aria-label="Siguiente"><Icon name="next" size={34} /></button>
           </>}
           {entry && <div className="stage-name">{entry.name}{photo ? ` · ${curSize.name}` : ''}{tool === 'draw' ? ' · Escribe con el dedo' : tool === 'text' ? ' · Toca donde quieras poner el texto' : ''}</div>}
-        </div>
+        </div>}
 
         <ThumbGrid roll={roll} focusKey={focusKey} badges={badges} selecting={selecting} selected={sel}
-          onPick={(e) => (selecting ? toggleSel(e) : setFocusKey(e.key))}
+          onPick={(e) => { if (selecting) toggleSel(e); else { setFocusKey(e.key); if (gridExpanded) setGridExpanded(false); } }}
           onLongPress={(e) => (selecting ? toggleSel(e) : startSelect(e))}
-          onSelectAll={selectAll} />
+          onSelectAll={selectAll} expanded={gridExpanded} onToggleExpand={() => setGridExpanded((v) => !v)} />
       </div>
 
       <div className="optbar">
@@ -304,50 +310,88 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
             <section className="ob-sec ob-size-sec">
               <h4>Tamaño {q && <span className={`q-inline ${q.level}`}>{q.label.split(':')[0]} · {q.dpi} ppp{!q.ok && rec && rec.id !== curSize.id && <button className="link" onClick={() => tapSize(rec.id)}>Mejor {short(rec)}</button>}</span>}</h4>
               {sizeGrid(curSize.id, tapSize, true)}
-              <div className="row" style={{ gap: 8, flexWrap: 'nowrap' }}>
-                {qtyOf(focusKey, curSize.id) === 0
-                  ? <button className="btn primary sm grow" onClick={() => setQty(focusKey, photo.id, curSize.id, 1)}><Icon name="plus" size={16} /> Añadir {short(curSize)}</button>
-                  : <><span className="small grow">Copias <b>{short(curSize)}</b></span><Stepper value={qtyOf(focusKey, curSize.id)} min={0} onChange={(v) => setQty(focusKey, photo.id, curSize.id, v)} /></>}
+            </section>
+
+            {/* Copias del tamaño elegido: empieza en 0; con 1 o más el tamaño entra en el pedido, con 0 sale. */}
+            <section className="ob-sec ob-copies">
+              <h4>Copias</h4>
+              <span className="oc-size" style={{ '--c': color(curSize.id) }}><i />{short(curSize)}</span>
+              <div className="big-stepper">
+                <button aria-label="Una copia menos" disabled={!qtyOf(focusKey, curSize.id)} onClick={() => setQty(focusKey, photo.id, curSize.id, qtyOf(focusKey, curSize.id) - 1)}>−</button>
+                <span className={qtyOf(focusKey, curSize.id) ? 'has' : ''}>{qtyOf(focusKey, curSize.id)}</span>
+                <button aria-label="Una copia más" onClick={() => setQty(focusKey, photo.id, curSize.id, qtyOf(focusKey, curSize.id) + 1)}>+</button>
               </div>
             </section>
 
-            <section className="ob-sec" style={{ width: 270 }}>
+            <section className="ob-sec ob-frame" style={{ width: 255 }}>
               <h4>Encuadre</h4>
               <div className="seg mini">
                 <button className={ed.mode === 'fill' ? 'on' : ''} onClick={() => setEdit(focusKey, { mode: 'fill' })}>Recortar</button>
                 <button className={ed.mode === 'fit' ? 'on' : ''} onClick={() => setEdit(focusKey, { mode: 'fit' })}>Foto entera</button>
               </div>
-              <div className="row" style={{ gap: 5, flexWrap: 'nowrap', opacity: ed.mode === 'fit' ? 1 : 0.55 }} title="Color de los márgenes al reducir la foto">
+              <div className="row sw-row" style={{ opacity: ed.mode === 'fit' ? 1 : 0.55 }} title="Color del fondo al reducir la foto">
                 {SWATCHES.map((c) => <button key={c} className={`swatch tiny ${ed.bg === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setEdit(focusKey, { bg: c })} aria-label={c} />)}
                 <label className="swatch tiny custom" title="Otro color"><input type="color" value={ed.bg} onChange={(e) => setEdit(focusKey, { bg: e.target.value })} />+</label>
               </div>
-              <div className="row" style={{ gap: 4, flexWrap: 'nowrap' }}>
-                {!curSize.card && (
-                  <label className="row small" style={{ gap: 6, flexWrap: 'nowrap' }}>
-                    <input type="checkbox" checked={ed.border} onChange={(e) => setEdit(focusKey, { border: e.target.checked, borderMm: ed.borderMm || settings.defaultBorderMm || 5 })} style={{ width: 20, height: 20 }} />
-                    Borde {ed.borderMm || 5} mm
+              {!curSize.card && (
+                <div className="border-grid">
+                  <label className={`bo-chip ${ed.border ? 'on' : ''}`}>
+                    <input type="checkbox" checked={ed.border} onChange={(e) => { setEdit(focusKey, { border: e.target.checked, borderMm: ed.borderMm || settings.defaultBorderMm || 5 }); setBorderPop(false); }} />
+                    Borde
                   </label>
-                )}
-                {!curSize.card && ed.border && <><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.max(1, (ed.borderMm || 5) - 1) })}>−</button><button className="btn sm icon" onClick={() => setEdit(focusKey, { borderMm: Math.min(20, (ed.borderMm || 5) + 1) })}>+</button></>}
-              </div>
-              <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
-                {!curSize.card && <button className="btn sm" onClick={() => setEdit(focusKey, { land: { ...ed.land, [curSize.id]: !landOf(ed, curSize, photo) }, crops: { ...ed.crops, [curSize.id]: null } })}>Girar</button>}
-                <button className="btn sm" onClick={() => setEdit(focusKey, { crops: { ...ed.crops, [curSize.id]: null }, fits: { ...ed.fits, [curSize.id]: null } })}>Centrar</button>
-                <button className="btn sm" onClick={() => { setEdits((all) => { const n = { ...all }; delete n[focusKey]; return n; }); toast({ type: 'ok', text: 'Foto restaurada a su estado original' }); }}><Icon name="rotate" size={14} /> Restaurar</button>
+                  {/* Al pulsar los mm se cambian el tamaño y el color del margen */}
+                  <button className="bo-chip num" disabled={!ed.border} onClick={(e) => { const r = e.currentTarget.getBoundingClientRect(); setBorderPop(borderPop ? false : { left: Math.max(8, r.left - 60), bottom: window.innerHeight - r.top + 10 }); }}>
+                    <i className="bo-color" style={{ background: ed.borderColor || '#ffffff' }} />{ed.borderMm || 5} mm
+                  </button>
+                  <button className={`bo-chip ${ed.roundCorners ? 'on' : ''}`} disabled={!ed.border} onClick={() => setEdit(focusKey, { roundCorners: !ed.roundCorners })} title="Esquinas redondeadas"><i className="bo-ico round" />Curvo</button>
+                  <button className={`bo-chip ${ed.frameLine ? 'on' : ''}`} disabled={!ed.border} onClick={() => setEdit(focusKey, { frameLine: !ed.frameLine })} title="Marco negro alrededor de la foto"><i className="bo-ico frame" />Marco</button>
+                </div>
+              )}
+              {borderPop && ed.border && (
+                <div className="bo-pop" style={{ position: 'fixed', left: borderPop.left, bottom: borderPop.bottom }}>
+                  <b className="small">Tamaño del margen</b>
+                  <div className="big-stepper">
+                    <button onClick={() => setEdit(focusKey, { borderMm: Math.max(1, (ed.borderMm || 5) - 1) })}>−</button>
+                    <span className="has">{ed.borderMm || 5}</span>
+                    <button onClick={() => setEdit(focusKey, { borderMm: Math.min(20, (ed.borderMm || 5) + 1) })}>+</button>
+                  </div>
+                  <div className="row" style={{ gap: 6 }}>{[3, 5, 8, 10].map((v) => <button key={v} className={`chip sm ${(ed.borderMm || 5) === v ? 'on' : ''}`} onClick={() => setEdit(focusKey, { borderMm: v })}>{v} mm</button>)}</div>
+                  <b className="small">Color del margen</b>
+                  <div className="row" style={{ gap: 8 }}>
+                    {SWATCHES.map((c) => <button key={c} className={`swatch ${(ed.borderColor || '#ffffff') === c ? 'on' : ''}`} style={{ background: c }} onClick={() => setEdit(focusKey, { borderColor: c })} aria-label={c} />)}
+                    <label className="swatch custom" title="Otro color"><input type="color" value={ed.borderColor || '#ffffff'} onChange={(e) => setEdit(focusKey, { borderColor: e.target.value })} />+</label>
+                  </div>
+                  <button className="btn sm primary" onClick={() => setBorderPop(false)}>Listo</button>
+                </div>
+              )}
+            </section>
+
+            {/* Ajustar: dos columnas. Girar cambia el papel (vertical/horizontal); Rotar gira solo la imagen 90°. */}
+            <section className="ob-sec ob-adjust" style={{ width: 190 }}>
+              <h4>Ajustar</h4>
+              <div className="adj-grid">
+                <button className="btn" disabled={!!curSize.card} onClick={() => setEdit(focusKey, { land: { ...ed.land, [curSize.id]: !landOf(ed, curSize, photo) }, crops: { ...ed.crops, [curSize.id]: null } })} title="Cambia el papel a vertical u horizontal"><Icon name="rotate" size={18} /> Girar</button>
+                <button className="btn" onClick={() => setEdit(focusKey, { crops: { ...ed.crops, [curSize.id]: null }, fits: { ...ed.fits, [curSize.id]: null } })}><Icon name="crop" size={18} /> Centrar</button>
+                <button className="btn" onClick={() => {
+                  // El papel conserva su orientación en todos los tamaños: solo gira la imagen.
+                  const land = Object.fromEntries(sizes.map((z) => [z.id, landOf(ed, z, photo)]));
+                  setEdit(focusKey, { rot: ((ed.rot || 0) + 90) % 360, land, crops: {}, fits: {} });
+                }} title="Gira la imagen 90° sin cambiar el papel"><Icon name="rotate" size={18} /> Rotar</button>
+                <button className="btn" onClick={() => { setEdits((all) => { const n = { ...all }; delete n[focusKey]; return n; }); setBorderPop(false); toast({ type: 'ok', text: 'Foto restaurada a su estado original' }); }}><Icon name="back" size={18} /> Restaurar</button>
               </div>
             </section>
 
-            <section className="ob-sec ob-filters" style={{ width: 330 }}>
+            <section className="ob-sec ob-filters" style={{ width: 255 }}>
               <h4>Filtro</h4>
               <FilterGrid src={entry.thumb} adjust={ed.adjust} onChange={(a) => setEdit(focusKey, { adjust: a })} compact />
             </section>
 
-            <section className="ob-sec" style={{ width: 230 }}>
+            <section className="ob-sec" style={{ width: 200 }}>
               <h4>Color <button className="link" onClick={() => setEdit(focusKey, { adjust: { ...ed.adjust, brightness: 0, contrast: 0, saturation: 0, warmth: 0 } })}>Restablecer</button></h4>
               <ColorSliders adjust={ed.adjust} onChange={(a) => setEdit(focusKey, { adjust: a })} compact />
             </section>
 
-            <section className="ob-sec" style={{ width: 200 }}>
+            <section className="ob-sec" style={{ width: 165 }}>
               <h4>Más {!tool && (ed.overlay.texts?.length || ed.overlay.strokes?.length) ? <button className="link" onClick={() => setOverlay({ texts: [], strokes: [] })}>Quitar texto</button> : null}</h4>
               <div className="row tight-btns" style={{ gap: 4, flexWrap: 'nowrap' }}>
                 <button className={`btn sm ${tool === 'text' ? 'primary' : ''}`} onClick={() => { setTool(tool === 'text' ? null : 'text'); setSelText(null); }}>Aa Texto</button>
@@ -392,10 +436,56 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
           )}
           <div className="row" style={{ gap: 14, flexWrap: 'nowrap' }}>
             <div className="col" style={{ gap: 0 }}><span className="muted small">{count} copia{count === 1 ? '' : 's'}</span><span className="total">{money(total, settings.currency)}</span></div>
+            {photo && L && <button className="btn sm" onClick={() => setPreviewOpen(true)}><Icon name="eye" size={16} /> Vista previa</button>}
             <button className="btn primary lg" disabled={!items.length || Object.keys(busy).length > 0} onClick={onNext}>Continuar <Icon name="next" /></button>
           </div>
         </section>
       </div>
+
+      {previewOpen && photo && L && (() => {
+        const maxW = 480, maxH = 500;
+        const pAspect = L.paper.w / L.paper.h;
+        let pw, ph;
+        if (pAspect > maxW / maxH) { pw = maxW; ph = pw / pAspect; }
+        else { ph = maxH; pw = ph * pAspect; }
+        const sc = pw / L.paper.w;
+        const crop = ed.crops[curSize.id] || { x: 0, y: 0, w: 1, h: 1 };
+        const winAspect = L.win.w / L.win.h;
+        const imgAspect = (photo.w * crop.w) / (photo.h * crop.h);
+        let clipW, clipH;
+        if (ed.mode === 'fill' || !ed.mode) {
+          clipW = '100%'; clipH = '100%';
+        } else {
+          if (imgAspect > winAspect) { clipW = '100%'; clipH = `${(winAspect / imgAspect) * 100}%`; }
+          else { clipH = '100%'; clipW = `${(imgAspect / winAspect) * 100}%`; }
+        }
+        return (
+          <Modal onClose={() => setPreviewOpen(false)}>
+            <h2 style={{ margin: 0, fontWeight: 400 }}>Vista previa de impresión</h2>
+            <p className="muted small" style={{ margin: 0 }}>
+              {curSize.name} · {L.paper.w}×{L.paper.h} mm{ed.border ? ` · borde ${ed.borderMm} mm` : ''}{L.polaroid ? ' · Polaroid' : ''}
+            </p>
+            <div style={{ width: pw, height: ph, position: 'relative', background: L.polaroid ? '#fff' : (ed.border ? ed.borderColor : '#fff'), borderRadius: 4, boxShadow: '0 4px 24px rgba(0,0,0,.25)', margin: '8px auto', overflow: 'hidden', flexShrink: 0 }}>
+              {/* Ventana de la foto */}
+              <div style={{ position: 'absolute', left: L.win.x * sc, top: L.win.y * sc, width: L.win.w * sc, height: L.win.h * sc, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ed.mode === 'fit' ? (ed.bg || '#fff') : undefined }}>
+                <img src={entry.preview} alt="" draggable={false} style={{
+                  width: clipW, height: clipH, objectFit: 'cover',
+                  objectPosition: `${(crop.x + crop.w / 2) * 100}% ${(crop.y + crop.h / 2) * 100}%`,
+                }} />
+              </div>
+              {/* Línea de marco si activada */}
+              {ed.border && ed.frameLine && <div style={{ position: 'absolute', left: L.win.x * sc - 1, top: L.win.y * sc - 1, width: L.win.w * sc + 2, height: L.win.h * sc + 2, border: '1px solid rgba(0,0,0,.2)', pointerEvents: 'none' }} />}
+              {/* Esquinas redondeadas */}
+              {ed.border && ed.roundCorners && <div style={{ position: 'absolute', left: L.win.x * sc, top: L.win.y * sc, width: L.win.w * sc, height: L.win.h * sc, borderRadius: 3 * sc, boxShadow: `0 0 0 ${Math.max(ed.borderMm, L.paper.w) * sc}px ${ed.borderColor}`, pointerEvents: 'none' }} />}
+              {/* Texto Polaroid */}
+              {L.polaroid && <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, height: (L.card.h - L.win.y - L.win.h) * sc, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: '"Caveat", cursive', fontSize: 14, color: '#888' }}>Polaroid</div>}
+            </div>
+            <div className="row" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn primary" onClick={() => setPreviewOpen(false)}>Cerrar</button>
+            </div>
+          </Modal>
+        );
+      })()}
 
       {textDraft && (
         <Modal onClose={() => setTextDraft(null)}>

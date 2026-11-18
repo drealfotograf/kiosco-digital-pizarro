@@ -16,7 +16,7 @@ const PhotoIcon = ({ size }) => (
  * Toque corto: ver la foto. Pulsación larga: selección múltiple. En modo selección, cada toque marca o desmarca.
  * badges: key → { sizes:[{id,qty,color}], warn, busy, virtual }
  */
-export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongPress, selecting = false, selected, onSelectAll }) {
+export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongPress, selecting = false, selected, onSelectAll, expanded = false, onToggleExpand }) {
   const [cols, setColsState] = useState(readCols);
   const setCols = (v) => { setColsState(v); try { localStorage.setItem('thumb-cols', String(v)); } catch { /* sin almacenamiento */ } };
   const ref = useRef(null);
@@ -33,7 +33,7 @@ export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongP
   const inOrder = roll.filter((e) => badges[e.key]?.sizes?.length).length;
 
   return (
-    <aside className={`thumbs-panel ${selecting ? 'selecting' : ''}`}>
+    <aside className={`thumbs-panel ${selecting ? 'selecting' : ''} ${expanded ? 'expanded' : ''}`}>
       <div className="tg-head">
         <div className="tg-size" title="Tamaño de las miniaturas">
           <PhotoIcon size={16} />
@@ -43,7 +43,10 @@ export default function ThumbGrid({ roll, focusKey, badges = {}, onPick, onLongP
         </div>
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <span className="small"><b>{roll.length}</b> foto{roll.length === 1 ? '' : 's'} · <b>{inOrder}</b> en el pedido</span>
-          {onSelectAll && roll.length > 1 && <button className="btn sm" onClick={onSelectAll}><Icon name="checks" size={16} /> Seleccionar todas</button>}
+          <span style={{ display: 'flex', gap: 6 }}>
+            {onToggleExpand && roll.length > 8 && <button className="btn sm" onClick={onToggleExpand} title={expanded ? 'Vista normal' : 'Cuadrícula completa'}><Icon name={expanded ? 'close' : 'layers'} size={16} /></button>}
+            {onSelectAll && roll.length > 1 && <button className="btn sm" onClick={onSelectAll}><Icon name="checks" size={16} /> Seleccionar todas</button>}
+          </span>
         </div>
       </div>
       <div className="tg-grid" ref={ref} style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }} onPointerMove={move}

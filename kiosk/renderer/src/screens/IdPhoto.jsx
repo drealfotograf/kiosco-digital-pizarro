@@ -4,7 +4,7 @@ import { Icon, Stepper, TouchField } from '../components/ui.jsx';
 import CropEditor, { useBox } from '../components/CropEditor.jsx';
 import Filmstrip from '../components/Filmstrip.jsx';
 import { ColorSliders } from '../components/ColorTools.jsx';
-import { sheetLayout, packSheets, cutGuides, defaultCrop, clampCropRot } from '../../../shared/layout.js';
+import { sheetLayout, packSheets, cutGuides, defaultCrop, faceCrop, clampCropRot } from '../../../shared/layout.js';
 import { money } from '../../../shared/presets.js';
 import { DEFAULT_ADJUST, svgMatrixValues } from '../../../shared/color.js';
 
@@ -107,7 +107,7 @@ function IdEditor({ settings, roll, ensurePhoto, preset, state, setState, onBack
   const spec = {
     kind: 'id', presetId: preset.id, custom: preset.id === 'custom' ? { w: preset.w, h: preset.h } : undefined,
     sheetId: sheet.id, gapMm: state.gapMm, marginMm: state.marginMm, guides: state.guides, separateSheets: state.separateSheets, faceGuides: state.faceGuides,
-    people: people.map((p) => ({ photoId: p.photoId, rollKey: p.rollKey, crop: p.crop || defaultCrop(photoById[p.photoId].w, photoById[p.photoId].h, preset.w / preset.h), copies: p.copies, lotId: p.lotId || '', adjust: p.adjust, angle: p.angle || 0 }))
+    people: people.map((p) => ({ photoId: p.photoId, rollKey: p.rollKey, crop: p.crop || faceCrop(photoById[p.photoId].w, photoById[p.photoId].h, preset.w / preset.h), copies: p.copies, lotId: p.lotId || '', adjust: p.adjust, angle: p.angle || 0 }))
   };
 
   return (

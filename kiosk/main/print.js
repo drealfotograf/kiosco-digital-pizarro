@@ -35,6 +35,24 @@ const queues = new Map();
 const rr = new Map();
 let helperWin = null;
 
+// ---------- Cola de impresión visible ----------
+const printQueue = [];
+let queueSeq = 0;
+function queueNotify() {
+  const summary = printQueue.map((j) => ({ id: j.id, file: j.file, printer: j.printer, status: j.status, attempt: j.attempt, error: j.error }));
+  notify('print:queue', summary);
+}
+function queueAdd(file, printer) {
+  const id = ++queueSeq;
+  const j = { id, file: path.basename(file), printer, status: 'pending', attempt: 0, error: null };
+  printQueue.push(j);
+  if (printQueue.length > 40) printQueue.splice(0, printQueue.length - 40);
+  queueNotify();
+  return j;
+}
+function queueUpdate(j, status, extra = {}) { Object.assign(j, { status, ...extra }); queueNotify(); }
+export function getPrintQueue() { return printQueue.map((j) => ({ id: j.id, file: j.file, printer: j.printer, status: j.status, attempt: j.attempt, error: j.error })); }
+
 function helper() {
   if (!helperWin || helperWin.isDestroyed()) helperWin = new BrowserWindow({ show: false });
   return helperWin;
@@ -62,12 +80,53 @@ export function pickPrinter(size) {
   return list[i];
 }
 
-/** Imprime con la gestión de color de la impresora y descuenta el papel de su rollo. */
+// ---------- Reimpresión automática ----------
+// Si una impresora falla (sin papel, sin tinta, error mecánico), se reintenta la foto que se
+// estaba imprimiendo para evitar que se pierda. Hasta 3 reintentos con pausa creciente;
+// tras cada fallo se avisa a la interfaz para que el personal sepa que debe reponer papel/tinta.
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [8_000, 20_000, 40_000]; // ms entre reintentos
+const notify = (channel, payload) => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send(channel, payload);
+  }
+};
+
+/** Imprime con la gestión de color de la impresora y descuenta el papel de su rollo.
+ *  Si falla, reintenta automáticamente hasta MAX_RETRIES veces para no perder fotos. */
 async function printOne(file0, opts) {
+  const job = queueAdd(file0, opts.printer);
   const file = await preparePrintFile(file0, opts.printer);
   try {
-    await (opts.printer === SIM_PRINTER ? simPrint(file, opts) : printRaw(file, opts));
-    await consumePrint(opts.printer, opts).catch(() => {});
+    let lastErr;
+    queueUpdate(job, 'printing', { attempt: 1 });
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        await (opts.printer === SIM_PRINTER ? simPrint(file, opts) : printRaw(file, opts));
+        if (attempt > 0) {
+          notify('print:retry-ok', { printer: opts.printer, attempt, file: path.basename(file0) });
+        }
+        await consumePrint(opts.printer, opts).catch(() => {});
+        queueUpdate(job, 'done');
+        return;
+      } catch (e) {
+        lastErr = e;
+        if (attempt < MAX_RETRIES) {
+          const delay = RETRY_DELAYS[attempt] || 40_000;
+          queueUpdate(job, 'retrying', { attempt: attempt + 1, error: e.message });
+          notify('print:retry', {
+            printer: opts.printer, attempt: attempt + 1, maxRetries: MAX_RETRIES,
+            file: path.basename(file0), error: e.message,
+            nextRetryIn: Math.round(delay / 1000)
+          });
+          await new Promise((r) => setTimeout(r, delay));
+          queueUpdate(job, 'printing', { attempt: attempt + 2 });
+        }
+      }
+    }
+    queueUpdate(job, 'error', { error: lastErr.message });
+    notify('print:failed', { printer: opts.printer, file: path.basename(file0), error: lastErr.message });
+    throw lastErr;
   } finally {
     if (file !== file0) fsp.rm(file, { force: true }).catch(() => {});
   }

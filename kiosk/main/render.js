@@ -178,7 +178,18 @@ export async function renderPrint(photo, item, size, dpi) {
   const PW = mmToPx(L.paper.w, dpi), PH = mmToPx(L.paper.h, dpi);
   const overlay = await renderOverlay(item.overlay, mmToPx(L.card.w, dpi), mmToPx(L.card.h, dpi));
   if (!L.polaroid && !item.border && !overlay) return { buf: photoBuf, W: PW, H: PH };
-  const comps = [{ input: photoBuf, left: mmToPx(L.win.x, dpi), top: mmToPx(L.win.y, dpi) }];
+  // Con borde: esquinas redondeadas y/o marco negro fino alrededor de la foto.
+  const WW = mmToPx(L.win.w, dpi), WH = mmToPx(L.win.h, dpi);
+  let pb = photoBuf;
+  if (item.border && item.roundCorners) {
+    const r = mmToPx(Number(item.radiusMm) || 3, dpi);
+    pb = await sharp(pb).ensureAlpha().composite([{ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${WW}" height="${WH}"><rect width="${WW}" height="${WH}" rx="${r}" ry="${r}" fill="#fff"/></svg>`), blend: 'dest-in' }]).png({ compressionLevel: 1 }).toBuffer();
+  }
+  const comps = [{ input: pb, left: mmToPx(L.win.x, dpi), top: mmToPx(L.win.y, dpi) }];
+  if (item.border && item.frameLine) {
+    const sw = Math.max(1, mmToPx(0.3, dpi)), r = item.roundCorners ? mmToPx(Number(item.radiusMm) || 3, dpi) : 0;
+    comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${WW + 2 * sw}" height="${WH + 2 * sw}"><rect x="${sw / 2}" y="${sw / 2}" width="${WW + sw}" height="${WH + sw}" rx="${r ? r + sw / 2 : 0}" fill="none" stroke="#000" stroke-width="${sw}"/></svg>`), left: mmToPx(L.win.x, dpi) - sw, top: mmToPx(L.win.y, dpi) - sw });
+  }
   if (L.polaroid && L.card.h < L.paper.h) {
     // Línea de corte discontinua al final de la Polaroid (el resto del papel 10x15 se recorta).
     const y = mmToPx(L.card.h, dpi);

@@ -23,6 +23,8 @@ export const FONT_CHOICES = [
 export const DEFAULT_FONTS = {
   ui: 'Montserrat', // texto general del programa
   headings: 'Montserrat', // títulos
+  fontScale: 1, // tamaño de la letra (1 = 100 %)
+  menuScale: 1, // tamaño de menús, barras y botones (1 = 100 %)
   // Mensajes de la pantalla de espera: cada uno con su letra y estilo; van rotando.
   messages: [
     { family: 'Montserrat', weight: 200, upper: true },

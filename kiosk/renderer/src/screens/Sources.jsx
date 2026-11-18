@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { api, on } from '../api.js';
+import { api, on, thumbUrl } from '../api.js';
 import { Icon, TouchField } from '../components/ui.jsx';
 import { checkFileName } from '../../../shared/presets.js';
 
@@ -97,14 +97,60 @@ export default function Sources({ session, settings, flow, roll, initial = 'usb'
 
 const localFiles = (list) => list.map((f) => ({ path: f.path, name: f.name }));
 
-/** Navegación por carpetas locales con «Cargar esta carpeta». */
+/**
+ * Archivos de la carpeta abierta en miniatura. Tocar marca o desmarca.
+ * Importar: las seleccionadas, todas las de esta carpeta, o todas incluidas las subcarpetas.
+ */
+function FilePicker({ files, subfolders, onImport, onImportAll, onImportDeep }) {
+  const ok = files.filter((f) => checkFileName(f.name).ok);
+  const bad = files.length - ok.length;
+  const [sel, setSel] = useState(() => new Set());
+  const [limit, setLimit] = useState(120);
+  useEffect(() => { setSel(new Set()); setLimit(120); }, [files]);
+  const toggle = (k) => setSel((x) => { const n = new Set(x); n.has(k) ? n.delete(k) : n.add(k); return n; });
+  const all = sel.size === ok.length && ok.length > 0;
+  return (
+    <div className="fp col">
+      <div className="fp-bar">
+        <div className="col" style={{ gap: 2 }}>
+          <b>{ok.length} foto{ok.length === 1 ? '' : 's'} en esta carpeta{sel.size ? ` · ${sel.size} seleccionada${sel.size === 1 ? '' : 's'}` : ''}</b>
+          <span className="small muted">{subfolders ? `${subfolders} subcarpeta${subfolders === 1 ? '' : 's'} · ` : ''}{bad ? `${bad} archivo${bad === 1 ? '' : 's'} no compatible${bad === 1 ? '' : 's'} · ` : ''}Toca las fotos para elegirlas</span>
+        </div>
+        <div className="row fp-acts">
+          {ok.length > 0 && <button className="btn" onClick={() => setSel(all ? new Set() : new Set(ok.map((f) => f.key)))}><Icon name="checks" /> {all ? 'Ninguna' : 'Seleccionar todas'}</button>}
+          <button className="btn primary" disabled={!sel.size} onClick={() => onImport(ok.filter((f) => sel.has(f.key)))}><Icon name="check" /> Importar seleccionadas{sel.size ? ` (${sel.size})` : ''}</button>
+          <button className="btn" disabled={!ok.length} onClick={onImportAll}><Icon name="folder" /> Todas ({ok.length})</button>
+          {subfolders > 0 && <button className="btn" onClick={onImportDeep}><Icon name="download" /> Todas + subcarpetas</button>}
+        </div>
+      </div>
+      {ok.length > 0 && (
+        <div className="fp-grid">
+          {ok.slice(0, limit).map((f) => (
+            <button key={f.key} className={`fp-item ${sel.has(f.key) ? 'sel' : ''}`} onClick={() => toggle(f.key)}>
+              <span className="fp-img"><img src={f.thumb} alt="" loading="lazy" draggable={false} /><span className="fs-check">{sel.has(f.key) && <Icon name="check" size={16} />}</span></span>
+              <span className="fp-name">{f.name}</span>
+            </button>
+          ))}
+          {ok.length > limit && <button className="btn fp-more" onClick={() => setLimit(limit + 240)}>Ver más ({ok.length - limit})</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Navegación por carpetas locales: subcarpetas arriba y archivos de la carpeta abierta para elegir. */
 function FolderNav({ root, rootLabel, origin, load }) {
   const [dir, setDir] = useState(root);
   const [data, setData] = useState(null);
   const [sub, setSub] = useState(true);
   const [err, setErr] = useState('');
   useEffect(() => { setDir(root); }, [root]);
-  useEffect(() => { setErr(''); setData(null); api('folder:list', dir).then(setData).catch((e) => setErr(e.message)); }, [dir]);
+  const [files, setFiles] = useState(null);
+  useEffect(() => {
+    setErr(''); setData(null); setFiles(null);
+    api('folder:list', dir).then(setData).catch((e) => setErr(e.message));
+    api('folder:scan', dir, false).then((l) => setFiles(l.map((f) => ({ key: f.path, name: f.name, path: f.path, thumb: thumbUrl(f.path, 240) })))).catch(() => setFiles([]));
+  }, [dir]);
   const rel = dir.slice(root.length).split(/[\\/]/).filter(Boolean);
   const crumbs = [{ label: rootLabel, path: root }];
   let acc = root;
@@ -113,24 +159,17 @@ function FolderNav({ root, rootLabel, origin, load }) {
     <div className="col">
       <div className="crumbs">{crumbs.map((c, i) => <React.Fragment key={c.path}>{i > 0 && <span className="muted">›</span>}<button className="btn sm" onClick={() => setDir(c.path)}>{c.label}</button></React.Fragment>)}</div>
       {err && <div className="card" style={{ color: 'var(--err)' }}>{err}</div>}
-      <div className="load-bar">
-        <div className="col" style={{ gap: 2 }}>
-          <b>{data ? `${data.images} foto${data.images === 1 ? '' : 's'} en esta carpeta` : 'Leyendo…'}</b>
-          {data && data.folders.length > 0 && <span className="small muted">y {data.folders.length} subcarpeta{data.folders.length === 1 ? '' : 's'}</span>}
-        </div>
-        <div className="row" style={{ gap: 10 }}>
-          <button className="btn lg" disabled={!data || !data.images} onClick={() => load(async () => localFiles(await api('folder:scan', dir, false)), origin)}>
-            <Icon name="folder" /> Solo esta carpeta
-          </button>
-          <button className="btn primary lg" disabled={!data} onClick={() => load(async () => localFiles(await api('folder:scan', dir, true)), origin)}>
-            <Icon name="download" /> Todo (con subcarpetas)
-          </button>
-        </div>
-      </div>
       {data?.folders.length > 0 && (
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+        <div className="grid fp-folders">
           {data.folders.map((f) => <div key={f.path} className="folder" onClick={() => setDir(f.path)}><Icon name="folder" /> {f.name}</div>)}
         </div>
+      )}
+      {(!data || !files) && !err && <div className="empty"><div className="spinner" /></div>}
+      {data && files && (
+        <FilePicker files={files} subfolders={data.folders.length}
+          onImport={(list) => load(async () => localFiles(list), origin)}
+          onImportAll={() => load(async () => localFiles(files), origin)}
+          onImportDeep={() => load(async () => localFiles(await api('folder:scan', dir, true)), origin)} />
       )}
     </div>
   );
@@ -339,19 +378,15 @@ function ServerPanel({ load }) {
       {err && <div className="card" style={{ color: 'var(--err)' }}>{err}</div>}
       {data && (
         <>
-          <div className="load-bar">
-            <div className="col" style={{ gap: 2 }}>
-              <b>{imgs} foto{imgs === 1 ? '' : 's'} en esta carpeta</b>
-              {data.folders.length > 0 && <span className="small muted">y {data.folders.length} subcarpeta{data.folders.length === 1 ? '' : 's'}</span>}
+          {data.folders.length > 0 && (
+            <div className="grid fp-folders">
+              {data.folders.map((f) => <div key={f.path} className="folder" onClick={() => setRel(f.path)}><Icon name="folder" /> {f.name}</div>)}
             </div>
-            <div className="row" style={{ gap: 10 }}>
-              <button className="btn lg" disabled={!imgs} onClick={() => load(async () => remoteFiles(data.files), 'Carpeta del servidor')}><Icon name="folder" /> Solo esta carpeta</button>
-              <button className="btn primary lg" onClick={() => load(async () => remoteFiles((await api('srvshare:list', rel, true)).files), 'Carpeta del servidor')}><Icon name="download" /> Todo (con subcarpetas)</button>
-            </div>
-          </div>
-          <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-            {data.folders.map((f) => <div key={f.path} className="folder" onClick={() => setRel(f.path)}><Icon name="folder" /> {f.name}</div>)}
-          </div>
+          )}
+          <FilePicker files={data.files.map((f) => ({ ...f, key: f.path }))} subfolders={data.folders.length}
+            onImport={(list) => load(async () => remoteFiles(list), 'Carpeta del servidor')}
+            onImportAll={() => load(async () => remoteFiles(data.files), 'Carpeta del servidor')}
+            onImportDeep={() => load(async () => remoteFiles((await api('srvshare:list', rel, true)).files), 'Carpeta del servidor')} />
         </>
       )}
       {!data && !err && <div className="empty"><div className="spinner" /></div>}

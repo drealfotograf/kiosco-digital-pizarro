@@ -1,8 +1,17 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Icon, Logo, Modal, TouchField } from '../components/ui.jsx';
 import { api } from '../api.js';
 import { LegalLink } from '../components/Legal.jsx';
 import PinLock, { parseLock, errorText } from '../components/PinLock.jsx';
+
+const SLOGANS = [
+  'Tus recuerdos,\nimpresos hoy.',
+  'Cada foto\ncuenta una historia.',
+  'Momentos únicos,\nimpresiones eternas.',
+  'Del móvil\nal papel en minutos.',
+  'Revive tus mejores\nmomentos.',
+];
+const SLOGAN_PANS = ['home-pan-a', 'home-pan-b', 'home-pan-c', 'home-pan-d', 'home-pan-e'];
 
 /** Inicio con la identidad Pizarro: panel azul con el logotipo y las opciones a la derecha. */
 export default function Home({ settings, onStart, onAdmin, onResume, onPinRelease, onGallery }) {
@@ -31,13 +40,38 @@ export default function Home({ settings, onStart, onAdmin, onResume, onPinReleas
     { icon: 'id', title: 'Fotos carnet', text: 'Lotes de fotos 35x45 para DNI, pasaporte y otros documentos.', go: () => onStart('id') },
   ];
 
+  const [sloganIdx, setSloganIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setSloganIdx((i) => (i + 1) % SLOGANS.length), 15_000);
+    return () => clearInterval(t);
+  }, []);
+  const slogan = SLOGANS[sloganIdx];
+  const pan = SLOGAN_PANS[sloganIdx % SLOGAN_PANS.length];
+  const L = settings.legal || {};
+
   return (
     <div className="home2">
       <aside className="brand-panel">
-        <div className="brand-center">
-          <Logo height={170} color="var(--cream)" />
+        <div className="brand-top">
+          <Logo height={140} color="var(--cream)" />
+          <span className="brand-since">Capturando tus mejores recuerdos desde 1986</span>
         </div>
-        <span className="foot">Toca una opción para empezar</span>
+        <div className="brand-slogan-wrap">
+          <span className="tag">Impresión fotográfica</span>
+          <h1 key={sloganIdx} className={`brand-slogan ${pan}`}>
+            {slogan.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}
+          </h1>
+        </div>
+        <div className="brand-foot">
+          {(L.phone || L.email) && (
+            <span className="brand-contact">
+              {L.phone && <span>{L.phone}</span>}
+              {L.phone && L.email && <span> · </span>}
+              {L.email && <span>{L.email}</span>}
+            </span>
+          )}
+          <span className="foot">Toca una opción para empezar</span>
+        </div>
       </aside>
 
       <main className="home-options">

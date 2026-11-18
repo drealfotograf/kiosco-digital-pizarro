@@ -17,6 +17,9 @@ function applyFonts(f = {}) {
   const r = document.documentElement.style;
   r.setProperty('--font-ui', fontStack(f.ui || 'Montserrat'));
   r.setProperty('--font-head', fontStack(f.headings || f.ui || 'Montserrat'));
+  // Tamaños independientes: letra de todo el programa y tamaño de menús y barras.
+  r.setProperty('--fs', String(Math.min(1.6, Math.max(0.7, Number(f.fontScale) || 1))));
+  r.setProperty('--ms', String(Math.min(1.6, Math.max(0.7, Number(f.menuScale) || 1))));
 }
 
 const freshId = (s) => ({ presetId: null, custom: { w: 35, h: 45 }, people: [], sheetId: s.idDefaults.sheetId, gapMm: s.idDefaults.gapMm, marginMm: s.idDefaults.marginMm, guides: s.idDefaults.guides, faceGuides: s.idDefaults.faceGuides, separateSheets: false });
@@ -153,7 +156,11 @@ export default function App() {
     const offs = [
       on('session', setSession), on('toast', toast), on('settings', setSettings),
       on('import-issue', (i) => setIssues((l) => [...l, { ...i, resolve: () => {} }])),
-      on('roll-add', ({ files, origin }) => loadIntoRoll(files, origin))
+      on('roll-add', ({ files, origin }) => loadIntoRoll(files, origin)),
+      // Reimpresión automática: avisa al personal cuando la impresora falla y se reintenta
+      on('print:retry', (d) => toast({ type: 'error', text: `⚠️ ${d.printer}: error al imprimir ${d.file}. Reintento ${d.attempt}/${d.maxRetries} en ${d.nextRetryIn} s…` })),
+      on('print:retry-ok', (d) => toast({ type: 'ok', text: `✅ ${d.printer}: reimpresión correcta de ${d.file} (intento ${d.attempt})` })),
+      on('print:failed', (d) => toast({ type: 'error', text: `❌ ${d.printer}: no se pudo imprimir ${d.file} tras varios intentos. Revisa la impresora.` }))
     ];
     return () => offs.forEach((f) => f());
   }, [toast, loadIntoRoll]);
@@ -216,8 +223,8 @@ export default function App() {
       for (const it of o.spec.items) {
         const rk = it.vc ? `${it.vc}:p:${it.photoId}` : `p:${it.photoId}`;
         const cur = ed[rk] || {
-          ...DEFAULT_EDIT, adjust: it.adjust || DEFAULT_EDIT.adjust, angle: it.angle || 0, mask: it.mask || '', mode: it.mode || 'fill', bg: it.bg || '#ffffff',
-          border: !!it.border, borderMm: it.borderMm || 5, borderColor: it.borderColor || '#ffffff', overlay: it.overlay || { texts: [], strokes: [] }, crops: {}, fits: {}, land: {}
+          ...DEFAULT_EDIT, adjust: it.adjust || DEFAULT_EDIT.adjust, angle: (it.angle || 0) - (it.rot || 0), rot: it.rot || 0, mask: it.mask || '', mode: it.mode || 'fill', bg: it.bg || '#ffffff',
+          border: !!it.border, borderMm: it.borderMm || 5, borderColor: it.borderColor || '#ffffff', roundCorners: !!it.roundCorners, frameLine: !!it.frameLine, overlay: it.overlay || { texts: [], strokes: [] }, crops: {}, fits: {}, land: {}
         };
         cur.crops[it.sizeId] = it.crop || null;
         cur.fits[it.sizeId] = it.fit || null;
@@ -265,6 +272,8 @@ export default function App() {
   if (!settings) return null;
   // Letras elegidas en Administración → Letras (programa y títulos; los mensajes van aparte en la pantalla de espera).
   applyFonts(settings.fonts);
+  // Modo oscuro
+  document.documentElement.setAttribute('data-theme', settings.darkMode ? 'dark' : 'light');
   // Fotos de carnet: lotes nuevos; los pedidos antiguos por formato se siguen abriendo en su pantalla.
   const idScreen = idState?.people?.length ? 'id' : 'idlots';
   const issue = issues[0];
@@ -279,10 +288,10 @@ export default function App() {
       const ov = ed.overlay || {};
       const vc = it.rollKey.startsWith('v') ? it.rollKey.split(':')[0] : undefined;
       return {
-        photoId: it.photoId, sizeId: it.sizeId, qty: it.qty, mode: ed.mode, bg: ed.bg, mask: ed.mask, adjust: ed.adjust, angle: ed.angle,
+        photoId: it.photoId, sizeId: it.sizeId, qty: it.qty, mode: ed.mode, bg: ed.bg, mask: ed.mask, adjust: ed.adjust, angle: (ed.rot || 0) + (ed.angle || 0), rot: ed.rot || 0,
         crop: ed.crops[it.sizeId] || null, fit: ed.mode === 'fit' ? ed.fits?.[it.sizeId] || null : null,
         landscape: landOf(ed, size, ph),
-        border: !size?.card && !!ed.border, borderMm: ed.borderMm || 5, borderColor: ed.borderColor || '#ffffff',
+        border: !size?.card && !!ed.border, borderMm: ed.borderMm || 5, borderColor: ed.borderColor || '#ffffff', roundCorners: !!ed.roundCorners, frameLine: !!ed.frameLine,
         overlay: ov.texts?.length || ov.strokes?.length ? ov : null,
         ...(vc ? { vc, name: roll.find((e) => e.key === it.rollKey)?.name } : {})
       };

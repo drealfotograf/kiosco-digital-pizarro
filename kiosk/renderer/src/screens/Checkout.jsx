@@ -3,6 +3,7 @@ import { api, on } from '../api.js';
 import { Icon, TouchField, Busy, Modal } from '../components/ui.jsx';
 import Quotes from '../components/Quotes.jsx';
 import PinLock, { parseLock, errorText } from '../components/PinLock.jsx';
+import PrintQueue from '../components/PrintQueue.jsx';
 import { money, priceFor, sizeOutput } from '../../../shared/presets.js';
 
 /** Resumen, datos del cliente y destino: impresión inmediata o laboratorio. */
@@ -254,6 +255,7 @@ export function Done({ result, settings, onFinish }) {
           : srv.local
             ? <div className="quality mini justa" style={{ fontSize: 15, textAlign: 'left' }}>El servidor no responde. Copia guardada en {srv.local}; se volverá a enviar automáticamente.</div>
             : <div className="quality mini baja" style={{ fontSize: 15 }}>No se ha podido enviar ni guardar la copia: avisa en el mostrador.</div>)}
+        {printed && <PrintQueue />}
         <button className="btn primary lg" onClick={onFinish}>Terminar ({left})</button>
       </div>
     </div>

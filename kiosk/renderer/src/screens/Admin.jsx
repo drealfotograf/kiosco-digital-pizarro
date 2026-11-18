@@ -192,6 +192,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                 <label>PIN de administración</label>{txt('adminPin')}
                 <label>Volver al inicio tras (s)</label>{txt('idleSeconds', { type: 'number', min: 30 })}
                 <label>Resolución de impresión (ppp)</label>{txt('dpi', { type: 'number', min: 150, max: 600 })}
+                <label>Modo oscuro</label>{chk('darkMode', 'Interfaz con colores oscuros (reducir brillo en tiendas con poca luz)')}
                 <label>Modo kiosco</label>{chk('kioskMode', 'Pantalla completa bloqueada (requiere reiniciar la app)')}
                 <label>«Más tamaños»</label>
                 <select className="inp" value={s.otherSizeMode || 'temporary'} onChange={(e) => set('otherSizeMode', e.target.value)}>
@@ -442,6 +443,34 @@ function DeliverySettings({ s, set, pin, pick, toast, dirty, printers = [] }) {
   );
 }
 
+function TicketPreview({ s, tk }) {
+  const L = s.legal || {};
+  const name = s.storeName || 'Nombre de la tienda';
+  const head = (tk.header || '').split('\n').filter(Boolean);
+  const foot = (tk.footer || '').split('\n').filter(Boolean);
+  return (
+    <div style={{ background: '#fff', color: '#000', fontFamily: "'Segoe UI', Arial, sans-serif", fontSize: 11, lineHeight: 1.35, width: 260, padding: '10px 14px', border: '1px solid var(--line)', borderRadius: 8, margin: '4px 0' }}>
+      {tk.logo && <div style={{ textAlign: 'center', marginBottom: 6 }}><img src={tk.logo} alt="" style={{ maxHeight: 36, maxWidth: 120 }} /></div>}
+      <div style={{ textAlign: 'center', fontWeight: 700, fontSize: 14 }}>{name}</div>
+      {L.nif && <div style={{ textAlign: 'center', fontSize: 9.5 }}>NIF: {L.nif}{L.address ? ` · ${L.address}` : ''}</div>}
+      {head.map((l, i) => <div key={i} style={{ textAlign: 'center', fontSize: 9.5 }}>{l}</div>)}
+      <hr style={{ border: 0, borderTop: '1px dashed #000', margin: '5px 0' }} />
+      <div style={{ textAlign: 'center', fontSize: 10 }}>TICKET DE PEDIDO · PAGO EN CAJA</div>
+      <div style={{ textAlign: 'center', fontSize: 22, fontWeight: 800 }}>Nº 001</div>
+      <div style={{ textAlign: 'center', fontSize: 9.5 }}>PED-20261118-001 · 18/11/2026 10:00</div>
+      <hr style={{ border: 0, borderTop: '1px dashed #000', margin: '5px 0' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10.5 }}><span>2 × Foto 10×15</span><span>1,20 €</span></div>
+      <hr style={{ border: 0, borderTop: '1px dashed #000', margin: '5px 0' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, fontSize: 13 }}><span>TOTAL</span><span>1,20 €</span></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5 }}><span>Base imponible</span><span>0,99 €</span></div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 9.5 }}><span>IVA {tk.ivaPct || 21} %</span><span>0,21 €</span></div>
+      <div style={{ border: '1.5px solid #000', borderRadius: 4, padding: '3px 5px', margin: '5px 0', textAlign: 'center', fontWeight: 700, fontSize: 10 }}>PENDIENTE DE PAGO EN CAJA</div>
+      {foot.map((l, i) => <div key={i} style={{ textAlign: 'center', fontSize: 9.5 }}>{l}</div>)}
+      <div style={{ textAlign: 'center', fontSize: 8.5, marginTop: 4, color: '#666' }}>Documento no válido como factura.</div>
+    </div>
+  );
+}
+
 /** Ticket para pagar en caja y PIN de 3 cifras para imprimir. */
 function TicketPinSettings({ s, set, printers }) {
   const tk = { enabled: true, printer: '', ivaPct: 21, header: '', footer: '', ...(s.ticket || {}) };
@@ -466,10 +495,21 @@ function TicketPinSettings({ s, set, printers }) {
             </select>
             <label>IVA incluido (%)</label>
             <input className="inp" type="number" min="0" max="50" style={{ width: 110 }} value={tk.ivaPct} onChange={(e) => st('ivaPct', Number(e.target.value))} />
+            <label>Logo del ticket (imagen pequeña, se centra arriba)</label>
+            <div className="row" style={{ gap: 12 }}>
+              {tk.logo && <img src={tk.logo} alt="Logo" style={{ maxHeight: 48, maxWidth: 160, objectFit: 'contain' }} />}
+              <input type="file" accept="image/*" style={{ fontSize: 14 }} onChange={async (e) => {
+                const f = e.target.files?.[0]; if (!f) return;
+                const r = new FileReader(); r.onload = () => st('logo', r.result); r.readAsDataURL(f);
+              }} />
+              {tk.logo && <button className="btn sm" onClick={() => st('logo', '')}>Quitar</button>}
+            </div>
             <label>Cabecera (una línea por renglón)</label>
             <textarea className="inp" rows={3} value={tk.header} onChange={(e) => st('header', e.target.value)} placeholder={'Razón social · NIF\nDirección\nTeléfono'} />
             <label>Pie</label>
             <textarea className="inp" rows={2} value={tk.footer} onChange={(e) => st('footer', e.target.value)} />
+            <label style={{ marginTop: 12 }}>Vista previa del ticket</label>
+            <TicketPreview s={s} tk={tk} />
           </div>
         )}
       </div>
@@ -515,6 +555,12 @@ function fontAvailable(family) {
 function FontSettings({ s, set }) {
   const fonts = { ...DEFAULT_FONTS, ...(s.fonts || {}) };
   const sf = (k, v) => set('fonts', { ...fonts, [k]: v });
+  // Vista previa al momento de los tamaños (al salir sin guardar vuelven los guardados).
+  useEffect(() => {
+    const r = document.documentElement.style;
+    r.setProperty('--fs', String(Number(fonts.fontScale) || 1));
+    r.setProperty('--ms', String(Number(fonts.menuScale) || 1));
+  }, [fonts.fontScale, fonts.menuScale]);
   const avail = FONT_CHOICES.filter((x) => fontAvailable(x.family));
   const msgs = fonts.messages?.length ? fonts.messages : DEFAULT_FONTS.messages;
   const idx = (fam) => msgs.findIndex((m) => m.family === fam);
@@ -540,6 +586,24 @@ function FontSettings({ s, set }) {
     <>
       <h2>Letras</h2>
       <p className="muted" style={{ margin: 0 }}>Todas funcionan sin internet: Montserrat y Plus Jakarta Sans van con el programa y el resto vienen con Windows. Solo aparecen las que están instaladas en este equipo.</p>
+
+      <h2 style={{ marginTop: 10 }}>Tamaño</h2>
+      <p className="muted" style={{ margin: 0 }}>Se ajustan por separado: el tamaño de la letra de todo el programa y el tamaño de los menús (barras, botones, pestañas y teclado). Se ve al momento; pulsa «Guardar» para que se quede.</p>
+      <div className="card col" style={{ maxWidth: 900, gap: 14 }}>
+        {[['fontScale', 'Letra', 'Texto de todas las pantallas'], ['menuScale', 'Menús', 'Barras, botones, pestañas y teclado táctil']].map(([k, l, d]) => {
+          const v = Math.round((Number(fonts[k]) || 1) * 100);
+          return (
+            <div key={k} className="size-row">
+              <span className="col" style={{ gap: 0 }}><b>{l}</b><span className="muted small">{d}</span></span>
+              <button className="btn sm" onClick={() => sf(k, Math.max(0.7, (v - 5) / 100))} aria-label={`${l} más pequeño`}>A−</button>
+              <input type="range" min="70" max="160" step="5" value={v} onChange={(e) => sf(k, Number(e.target.value) / 100)} />
+              <button className="btn sm" onClick={() => sf(k, Math.min(1.6, (v + 5) / 100))} aria-label={`${l} más grande`}>A+</button>
+              <b className="size-val">{v} %</b>
+              <button className="btn sm" disabled={v === 100} onClick={() => sf(k, 1)}>100 %</button>
+            </div>
+          );
+        })}
+      </div>
 
       <h2 style={{ marginTop: 10 }}>Resto del programa</h2>
       {pick('ui', 'Texto general (botones, listas, avisos)', 'Elige y edita tus fotos 10 x 15')}

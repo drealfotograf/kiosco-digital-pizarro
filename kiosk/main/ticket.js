@@ -49,6 +49,7 @@ export function makeTicket(order, s = getSettings()) {
     corto: String(order.orderNo).split('-').pop(),
     fecha: order.createdAt || new Date().toISOString(),
     tienda: s.storeName,
+    legal: s.legal || {},
     kiosco: s.kioskName || 'Kiosco',
     cliente: order.customer || {},
     lineas: lines,
@@ -91,7 +92,9 @@ export function ticketHtml(t, s = getSettings()) {
     .pinbox{border:3px solid #000;border-radius:6px;padding:4px 6px 6px;margin:6px 0;text-align:center}
     .pin{font-size:54px;font-weight:900;letter-spacing:14px;line-height:1.05;font-family:'Consolas','Courier New',monospace;padding-left:14px}
   </style></head><body>
+    ${tk.logo ? `<div class="c" style="margin-bottom:4px"><img src="${esc(tk.logo)}" style="max-height:48px;max-width:180px" /></div>` : ''}
     <div class="c b" style="font-size:16px">${esc(t.tienda)}</div>
+    ${t.legal?.nif ? `<div class="c s">NIF: ${esc(t.legal.nif)}${t.legal.address ? ` · ${esc(t.legal.address)}` : ''}</div>` : ''}
     <div class="c s">${head}</div>
     <hr>
     <div class="c">TICKET DE PEDIDO · PAGO EN CAJA</div>

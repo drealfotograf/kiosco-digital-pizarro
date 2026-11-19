@@ -25,7 +25,8 @@ export function newLot(settings, lotId, from = {}) {
   const o = { ...DEFAULT_ID_OPTIONS, ...(settings.idOptions || {}) };
   return {
     uid: uid(), lotId, photoId: from.photoId || null, rollKey: from.rollKey || null,
-    crop: null, cropBig: null, angle: 0, adjust: { ...DEFAULT_ADJUST }, copies: 1,
+    crop: from.crop ?? null, cropBig: from.cropBig ?? null, angle: from.angle || 0,
+    adjust: from.adjust ? { ...from.adjust } : { ...DEFAULT_ADJUST }, copies: 1,
     guides: o.allowGuides ? !!o.guides : false, border: o.allowBorder ? !!o.border : false
   };
 }

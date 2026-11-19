@@ -242,7 +242,7 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
               crop={ed.crops[curSize.id]} onChange={(c) => setEdit(focusKey, { crops: { ...ed.crops, [curSize.id]: c } })}
               fit={ed.fits[curSize.id]} onFit={(v) => setEdit(focusKey, { fits: { ...ed.fits, [curSize.id]: v } })}
               angle={ed.angle} rot={ed.rot || 0} onAngle={(a) => setEdit(focusKey, { angle: a })}
-              mode={ed.mode} bg={ed.bg} adjust={ed.adjust} mask={maskPath(ed.mask)}
+              mode={ed.mode} bg={ed.bg} adjust={ed.adjust} round={!!curSize.round} mask={maskPath(ed.mask)}
               maxW={Math.max(200, stage.w - 150)} maxH={Math.max(200, stage.h - 40)}
               lockGestures={!!tool}
               onModeChange={(m, p) => setEdit(focusKey, {
@@ -467,7 +467,7 @@ export default function Studio({ settings, roll, items, setItems, edits, setEdit
             </p>
             <div style={{ width: pw, height: ph, position: 'relative', background: L.polaroid ? '#fff' : (ed.border ? ed.borderColor : '#fff'), borderRadius: 4, boxShadow: '0 4px 24px rgba(0,0,0,.25)', margin: '8px auto', overflow: 'hidden', flexShrink: 0 }}>
               {/* Ventana de la foto */}
-              <div style={{ position: 'absolute', left: L.win.x * sc, top: L.win.y * sc, width: L.win.w * sc, height: L.win.h * sc, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ed.mode === 'fit' ? (ed.bg || '#fff') : undefined }}>
+              <div style={{ position: 'absolute', left: L.win.x * sc, top: L.win.y * sc, width: L.win.w * sc, height: L.win.h * sc, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', background: ed.mode === 'fit' ? (ed.bg || '#fff') : undefined, borderRadius: curSize.round ? '50%' : undefined }}>
                 <img src={entry.preview} alt="" draggable={false} style={{
                   width: clipW, height: clipH, objectFit: 'cover',
                   objectPosition: `${(crop.x + crop.w / 2) * 100}% ${(crop.y + crop.h / 2) * 100}%`,

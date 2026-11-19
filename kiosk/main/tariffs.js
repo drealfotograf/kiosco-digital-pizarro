@@ -4,6 +4,7 @@
 //   carnet;eu-pass;Pasaporte UE;35;45;8;;;
 //   lote;lot4;Lote 4 fotos;;;6;;4;eu-pass
 import fsp from 'node:fs/promises';
+import path from 'node:path';
 import { getSettings, saveSettings } from './config.js';
 
 const HEAD = ['tipo', 'id', 'nombre', 'ancho_mm', 'alto_mm', 'precio', 'tramos', 'fotos', 'formato'];
@@ -70,5 +71,31 @@ export function applyTariffsCsv(text) {
   return summary;
 }
 
-export async function exportTariffs(file) { await fsp.writeFile(file, tariffsToCsv(), 'utf8'); }
+export function tariffsToJson(s = getSettings()) {
+  const data = {
+    copias: s.printSizes.map((z) => ({ id: z.id, nombre: z.name, ancho_mm: z.w, alto_mm: z.h, precio: z.price, tramos: (z.tiers || []).map((t) => ({ desde: t.from, precio: t.price })) })),
+    carnet: (s.idPresets || []).map((p) => ({ id: p.id, nombre: p.name, ancho_mm: p.w, alto_mm: p.h, precio: p.price })),
+    lotes: (s.idLots || []).map((l) => ({ id: l.id, nombre: l.name, precio: l.price, fotos: l.photos, formato: l.presetId || '' }))
+  };
+  return JSON.stringify(data, null, 2);
+}
+
+async function nextBaseName(dir) {
+  const date = new Date().toISOString().slice(0, 10);
+  const base = `${date}_tarifa`;
+  try { await fsp.access(path.join(dir, `${base}.csv`)); } catch { return base; }
+  for (let n = 1; ; n++) {
+    const name = `${base} (${n})`;
+    try { await fsp.access(path.join(dir, `${name}.csv`)); } catch { return name; }
+  }
+}
+
+export async function exportTariffs(dir) {
+  const base = await nextBaseName(dir);
+  const csvPath = path.join(dir, `${base}.csv`);
+  const jsonPath = path.join(dir, `${base}.json`);
+  await fsp.writeFile(csvPath, tariffsToCsv(), 'utf8');
+  await fsp.writeFile(jsonPath, tariffsToJson(), 'utf8');
+  return { csv: csvPath, json: jsonPath, base };
+}
 export async function importTariffs(file) { return applyTariffsCsv(await fsp.readFile(file, 'utf8')); }

@@ -23,7 +23,7 @@ export default function AdminTariffs({ s, set, printers, pin, toast, dirty, setS
     <>
       <h2>Tarifas</h2>
       <div className="row">
-        <button className="btn" disabled={dirty} onClick={async () => { const f = await api('tariffs:export', pin); if (f) toast({ type: 'ok', text: `Tarifas exportadas a ${f}` }); }}><Icon name="download" /> Exportar (CSV / Excel)</button>
+        <button className="btn" disabled={dirty} onClick={async () => { const f = await api('tariffs:export', pin); if (f) toast({ type: 'ok', text: `Tarifas exportadas (Excel + JSON)` }); }}><Icon name="download" /> Exportar (Excel + JSON)</button>
         <button className="btn" disabled={dirty} onClick={async () => {
           try { const r = await api('tariffs:import', pin); if (r) { setS(r.settings); toast({ type: 'ok', text: `Importado: ${r.summary.updated} actualizadas, ${r.summary.added} nuevas, ${r.summary.skipped} omitidas` }); } } catch (e) { toast({ type: 'error', text: e.message }); }
         }}><Icon name="plus" /> Importar</button>
@@ -120,6 +120,12 @@ function TariffEditor({ s, sizes, id, setId, patch, printers, pin, defFolder, on
           </div>
           <span className="muted small">Con varias, los trabajos se reparten entre ellas.{!(z.printers || []).length && s.simPrinter?.enabled && ds620Supports(z.w, z.h) ? ' Sin ninguna marcada, usa la DS620 simulada.' : ''}</span>
         </div>
+
+        <label>Corte redondo</label>
+        <label className="row" style={{ gap: 8 }}>
+          <input type="checkbox" checked={!!z.round} onChange={(e) => patch(z.id, { round: e.target.checked })} style={{ width: 22, height: 22 }} />
+          Recortar la foto en forma circular (mismo tamaño de papel)
+        </label>
 
         <label>Al confirmar el pedido</label>
         <select className="inp" value={out} onChange={(e) => patch(z.id, { out: e.target.value })}>

@@ -56,9 +56,13 @@ export default function App() {
   const lastTouch = useRef(Date.now());
   const toastTimer = useRef(null);
   const rollRef = useRef(roll);
+  const editsRef = useRef(edits);
+  const itemsRef = useRef(items);
   // Estadísticas de la sesión del cliente (anónimas): inicio, fuentes usadas y si hizo pedido.
   const statRef = useRef(null);
   rollRef.current = roll;
+  editsRef.current = edits;
+  itemsRef.current = items;
 
   const toast = useCallback((t) => {
     setToastMsg(t);
@@ -278,12 +282,12 @@ export default function App() {
   const idScreen = idState?.people?.length ? 'id' : 'idlots';
   const issue = issues[0];
   const closeIssue = (answer) => { issue.resolve(answer); setIssues((l) => l.slice(1)); };
-  /** Especificación del pedido: cada copia lleva los ajustes de su foto y el recorte de su tamaño. */
+  /** Especificación del pedido: lee de refs para capturar siempre el último encuadre. */
   const printSpec = () => ({
     kind: 'prints',
-    items: items.map((it) => {
-      const ed = { ...DEFAULT_EDIT, ...(edits[it.rollKey] || {}) };
-      const ph = roll.find((e) => e.key === it.rollKey)?.photo;
+    items: itemsRef.current.map((it) => {
+      const ed = { ...DEFAULT_EDIT, ...(editsRef.current[it.rollKey] || {}) };
+      const ph = rollRef.current.find((e) => e.key === it.rollKey)?.photo;
       const size = settings.printSizes.find((s) => s.id === it.sizeId);
       const ov = ed.overlay || {};
       const vc = it.rollKey.startsWith('v') ? it.rollKey.split(':')[0] : undefined;
@@ -291,9 +295,9 @@ export default function App() {
         photoId: it.photoId, sizeId: it.sizeId, qty: it.qty, mode: ed.mode, bg: ed.bg, mask: ed.mask, adjust: ed.adjust, angle: (ed.rot || 0) + (ed.angle || 0), rot: ed.rot || 0,
         crop: ed.crops[it.sizeId] || null, fit: ed.mode === 'fit' ? ed.fits?.[it.sizeId] || null : null,
         landscape: landOf(ed, size, ph),
-        border: !size?.card && !!ed.border, borderMm: ed.borderMm || 5, borderColor: ed.borderColor || '#ffffff', roundCorners: !!ed.roundCorners, frameLine: !!ed.frameLine,
+        border: !size?.card && !!ed.border, borderMm: ed.borderMm || 5, borderColor: ed.borderColor || '#ffffff', roundCorners: !!ed.roundCorners, frameLine: !!ed.frameLine, round: !!size?.round,
         overlay: ov.texts?.length || ov.strokes?.length ? ov : null,
-        ...(vc ? { vc, name: roll.find((e) => e.key === it.rollKey)?.name } : {})
+        ...(vc ? { vc, name: rollRef.current.find((e) => e.key === it.rollKey)?.name } : {})
       };
     })
   });

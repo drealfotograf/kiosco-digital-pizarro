@@ -32,7 +32,7 @@ const clampFit = (f) => ({ s: Math.min(4, Math.max(0.15, f.s)), dx: Math.min(1, 
  * frame: {w,h} mm de la ventana de la foto. sheet (opcional): { w, h, win:{x,y,w,h}, color } para mostrar
  * el papel completo (borde o Polaroid) con la ventana dentro. overlay: función (W,H) → capa de texto/dibujo.
  */
-export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle: straight = 0, rot: rot90 = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false, onModeChange }) {
+export default function CropEditor({ photo, src, frame, sheet, crop, onChange, fit, onFit, angle: straight = 0, rot: rot90 = 0, onAngle, mode = 'fill', bg = '#ffffff', adjust, faceGuide, round = false, mask, maxW, maxH, showSlider = true, dark = true, overlay, lockGestures = false, onModeChange }) {
   const [boxRef, box] = useBox();
   // Giro total = rotación de 90° de la imagen («Rotar») + enderezado fino (±45°, el deslizador).
   const angle = (Number(rot90) || 0) + (Number(straight) || 0);
@@ -137,7 +137,11 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
   };
   const onUp = (e) => {
     pointers.current.delete(e.pointerId);
-    start.current = pointers.current.size ? { crop: c, fit: f, angle: straight, mode, z: zOf(live.current), pts: new Map(pointers.current) } : null;
+    if (pointers.current.size) {
+      start.current = { crop: c, fit: f, angle: straight, mode, z: zOf(live.current), pts: new Map(pointers.current) };
+    } else {
+      start.current = null;
+    }
   };
   const onWheel = (e) => {
     if (lockGestures) return;
@@ -180,6 +184,7 @@ export default function CropEditor({ photo, src, frame, sheet, crop, onChange, f
               </g>
             )}
             {faceGuide && <FaceGuide frame={frame} g={faceGuide} />}
+            {round && !faceGuide && <RoundGuide frame={frame} />}
           </svg>
         </div>
         {overlay && <div className="overlay-host" style={{ width: SW, height: sheet?.cardH ? sheet.cardH * sc : SH }}>{overlay(SW, sheet?.cardH ? sheet.cardH * sc : SH)}</div>}
@@ -220,6 +225,19 @@ function FaceGuide({ frame, g }) {
       <ellipse cx={cx} cy={top + head / 2} rx={head * 0.36} ry={head / 2} stroke="#F6F2EA" strokeOpacity=".9" />
       <line x1={cx} y1="0" x2={cx} y2={frame.h} stroke="rgba(246,242,234,.5)" />
       <line x1={cx - head * 0.3} y1={top + head * 0.5} x2={cx + head * 0.3} y2={top + head * 0.5} stroke="rgba(246,242,234,.7)" />
+    </g>
+  );
+}
+
+function RoundGuide({ frame }) {
+  const r = Math.min(frame.w, frame.h) / 2;
+  const cx = frame.w / 2, cy = frame.h / 2;
+  const sw = frame.w / 300;
+  const d = `M0 0h${frame.w}v${frame.h}H0Z M${cx} ${cy - r}A${r} ${r} 0 1 0 ${cx} ${cy + r}A${r} ${r} 0 1 0 ${cx} ${cy - r}Z`;
+  return (
+    <g>
+      <path d={d} fill="rgba(0,0,0,.4)" fillRule="evenodd" />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke="rgba(246,242,234,.7)" strokeWidth={sw} strokeDasharray={`${sw * 6} ${sw * 4}`} />
     </g>
   );
 }

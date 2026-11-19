@@ -177,7 +177,7 @@ export async function renderPrint(photo, item, size, dpi) {
   });
   const PW = mmToPx(L.paper.w, dpi), PH = mmToPx(L.paper.h, dpi);
   const overlay = await renderOverlay(item.overlay, mmToPx(L.card.w, dpi), mmToPx(L.card.h, dpi));
-  if (!L.polaroid && !item.border && !overlay) return { buf: photoBuf, W: PW, H: PH };
+  if (!L.polaroid && !item.border && !overlay && !item.round) return { buf: photoBuf, W: PW, H: PH };
   // Con borde: esquinas redondeadas y/o marco negro fino alrededor de la foto.
   const WW = mmToPx(L.win.w, dpi), WH = mmToPx(L.win.h, dpi);
   let pb = photoBuf;
@@ -197,8 +197,14 @@ export async function renderPrint(photo, item, size, dpi) {
     comps.push({ input: Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}"><line x1="0" y1="${y}" x2="${PW}" y2="${y}" stroke="#b9b2a6" stroke-width="${sw}" stroke-dasharray="${sw * 8} ${sw * 6}"/></svg>`), left: 0, top: 0 });
   }
   if (overlay) comps.push({ input: overlay, left: mmToPx(L.card.x, dpi), top: mmToPx(L.card.y, dpi) });
-  const buf = await sharp({ create: { width: PW, height: PH, channels: 3, background: parseColor(L.polaroid ? '#ffffff' : (item.borderColor || '#ffffff')) } })
+  let buf = await sharp({ create: { width: PW, height: PH, channels: 3, background: parseColor(L.polaroid ? '#ffffff' : (item.borderColor || '#ffffff')) } })
     .composite(comps).png({ compressionLevel: 1 }).toBuffer();
+  if (item.round) {
+    const r = Math.min(PW, PH) / 2;
+    const cx = PW / 2, cy = PH / 2;
+    const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${PW}" height="${PH}"><circle cx="${cx}" cy="${cy}" r="${r}" fill="#fff"/></svg>`);
+    buf = await sharp(buf).ensureAlpha().composite([{ input: mask, blend: 'dest-in' }]).png({ compressionLevel: 1 }).toBuffer();
+  }
   return { buf, W: PW, H: PH };
 }
 

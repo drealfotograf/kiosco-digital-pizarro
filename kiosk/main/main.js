@@ -179,10 +179,10 @@ function registerIpc() {
   // Tarifas
   handle('tariffs:export', async (pin) => {
     checkPin(pin);
-    const r = await dialog.showSaveDialog(win, { defaultPath: `tarifas-${new Date().toISOString().slice(0, 10)}.csv`, filters: [{ name: 'CSV (Excel)', extensions: ['csv'] }] });
-    if (r.canceled || !r.filePath) return null;
-    await exportTariffs(r.filePath);
-    return r.filePath;
+    const r = await dialog.showOpenDialog(win, { properties: ['openDirectory'], title: 'Elegir carpeta para exportar tarifas' });
+    if (r.canceled || !r.filePaths[0]) return null;
+    const result = await exportTariffs(r.filePaths[0]);
+    return result.csv;
   });
   handle('tariffs:import', async (pin) => {
     checkPin(pin);

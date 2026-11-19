@@ -498,7 +498,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
   - Vista cuadrícula a pantalla completa para las miniaturas.
 - [x] **Correcciones (18/11/2026):**
   - Animación de eslóganes: `overflow: visible` en `.brand-slogan-wrap` para que el texto no se corte durante las transiciones.
-  - Persistencia del encuadre: `CropEditor.onUp` llama a `commit()` al soltar, y `printSpec()` usa refs para leer siempre el estado más reciente.
+  - Persistencia del encuadre: `printSpec()` usa refs para leer siempre el estado más reciente de React 19. Se eliminó el `commit(c)` del `onUp` del CropEditor (causaba un stale-closure que sobreescribía el encuadre correcto con un valor antiguo del ciclo de render).
   - Exportación de tarifas: se genera CSV (Excel) + JSON con el mismo nombre `AAAA-MM-DD_tarifa`, numeración `(1)`, `(2)`… si ya existe. Diálogo de carpeta en vez de archivo.
 - [x] **Tamaños redondos y persistencia de lotes (18/11/2026):**
   - **Corte circular:** cada tamaño de impresión puede activar «Corte redondo» en Tarifas. La foto se recorta en forma circular inscrita en la dimensión menor del papel. Implementado en: `CropEditor` (guía circular con `RoundGuide`), `Studio` (pasa `round` al editor y clip circular en la vista previa), `App.jsx` (`printSpec` incluye `round`), `render.js` (máscara SVG con `dest-in`) y `AdminTariffs` (checkbox).
@@ -845,6 +845,13 @@ cd kiosk && npm install && npm start
 - **CSS:** nuevas clases `.sub-nav` y `.sub-btn` con estilo de botones redondeados.
 - **Home.jsx:** eliminado el texto «Impresión fotográfica» de la pantalla de espera.
 - **Build y kiosco reiniciado:** compila correctamente y la ventana se abre.
+
+### 19/11/2026 · Tamaños redondos, persistencia de encuadre y corrección de stale-closure
+- **Tamaños redondos (corte circular):** cada tamaño puede activar «Corte redondo» en Tarifas. CropEditor muestra guía circular, Studio pasa `round` y aplica clip en preview, `printSpec` incluye `round`, `render.js` usa máscara SVG `dest-in`, AdminTariffs añade checkbox.
+- **Encuadre persistente entre lotes de carnet:** `newLot()` conserva `crop`, `cropBig`, `angle` y `adjust` del lote anterior.
+- **Corrección stale-closure en CropEditor:** el `onUp` llamaba a `commit(c)` donde `c` provenía del closure de render anterior (React batching). Al soltar el dedo, el encuadre volvía a una posición intermedia. Solución: eliminar el `commit(c)` de `onUp` — el último `onMove` ya guarda la posición final correcta.
+- **Archivos modificados:** CropEditor.jsx, Studio.jsx, App.jsx, render.js, tariffs.js, main.js, AdminTariffs.jsx, IdLots.jsx.
+- **Build correcto y kiosco reiniciado.**
 
 ### 19/11/2026 · Eslogan y sub-navegación
 - **Eslogan en dos líneas:** «Capturamos tus mejores recuerdos / Desde 1986» centrado en la pantalla de inicio (`Home.jsx`).

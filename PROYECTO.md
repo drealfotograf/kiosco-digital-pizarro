@@ -845,3 +845,8 @@ cd kiosk && npm install && npm start
 - **CSS:** nuevas clases `.sub-nav` y `.sub-btn` con estilo de botones redondeados.
 - **Home.jsx:** eliminado el texto «Impresión fotográfica» de la pantalla de espera.
 - **Build y kiosco reiniciado:** compila correctamente y la ventana se abre.
+
+### 19/11/2026 · Eslogan y sub-navegación
+- **Eslogan en dos líneas:** «Capturamos tus mejores recuerdos / Desde 1986» centrado en la pantalla de inicio (`Home.jsx`).
+- **Sub-navegación rediseñada:** estilo píldora moderno en Administración — fondo `surface-2`, botones sin borde, sombra en el activo (`styles.css`).
+- **Build, kiosco reiniciado y subido a GitHub.**

@@ -632,10 +632,10 @@ input[type=range] { accent-color: var(--navy); }
 .lot-card { gap: 10px; }
 .lot-card.off { opacity: .55; }
 .deliv-opt { padding: 8px 0; cursor: pointer; }
-.sub-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
-.sub-btn { padding: 10px 20px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); font-size: 15px; font-weight: 500; cursor: pointer; transition: all .15s; }
-.sub-btn:hover { border-color: var(--navy); }
-.sub-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
+.sub-nav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 20px; padding: 6px; background: var(--surface-2); border-radius: 14px; }
+.sub-btn { padding: 10px 22px; border-radius: 10px; border: none; background: transparent; color: var(--ink-2); font-size: 15px; font-weight: 500; cursor: pointer; transition: all .2s; }
+.sub-btn:hover { background: var(--surface); color: var(--ink); }
+.sub-btn.on { background: var(--navy); color: #fff; box-shadow: 0 2px 8px rgba(11,29,48,.18); }
 .tg-item { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; min-height: 0; }
 .tg-item img { position: absolute; inset: 0; }
 .tg-grid { grid-auto-rows: max-content; }

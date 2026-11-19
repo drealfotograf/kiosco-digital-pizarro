@@ -54,7 +54,7 @@ export default function Home({ settings, onStart, onAdmin, onResume, onPinReleas
       <aside className="brand-panel">
         <div className="brand-top">
           <Logo height={140} color="var(--cream)" />
-          <span className="brand-since">Capturando tus mejores recuerdos desde 1986</span>
+          <span className="brand-since">Capturamos tus mejores recuerdos<br />Desde 1986</span>
         </div>
         <div className="brand-slogan-wrap">
           <h1 key={sloganIdx} className={`brand-slogan ${pan}`}>

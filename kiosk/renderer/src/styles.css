@@ -522,7 +522,7 @@ input[type=range] { accent-color: var(--navy); }
 .brand-top svg { margin-bottom: 0; }
 .brand-center { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding-bottom: 6vh; }
 .brand-center svg { align-self: center; margin-bottom: 4vh; }
-.brand-slogan-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; overflow: hidden; position: relative; }
+.brand-slogan-wrap { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 16px; overflow: visible; position: relative; }
 .brand-slogan { animation-duration: 15s; animation-timing-function: ease-in-out; animation-fill-mode: both; transform-origin: center; }
 .brand-slogan.home-pan-a { animation-name: home-pan-a; }
 .brand-slogan.home-pan-b { animation-name: home-pan-b; color: var(--sand); }
@@ -632,6 +632,10 @@ input[type=range] { accent-color: var(--navy); }
 .lot-card { gap: 10px; }
 .lot-card.off { opacity: .55; }
 .deliv-opt { padding: 8px 0; cursor: pointer; }
+.sub-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.sub-btn { padding: 10px 20px; border-radius: 10px; border: 2px solid var(--line); background: var(--bg); color: var(--fg); font-size: 15px; font-weight: 500; cursor: pointer; transition: all .15s; }
+.sub-btn:hover { border-color: var(--navy); }
+.sub-btn.on { background: var(--navy); color: #fff; border-color: var(--navy); }
 .tg-item { display: block; width: 100%; height: auto; aspect-ratio: 1 / 1; min-height: 0; }
 .tg-item img { position: absolute; inset: 0; }
 .tg-grid { grid-auto-rows: max-content; }

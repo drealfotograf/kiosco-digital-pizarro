@@ -57,7 +57,6 @@ export default function Home({ settings, onStart, onAdmin, onResume, onPinReleas
           <span className="brand-since">Capturando tus mejores recuerdos desde 1986</span>
         </div>
         <div className="brand-slogan-wrap">
-          <span className="tag">Impresión fotográfica</span>
           <h1 key={sloganIdx} className={`brand-slogan ${pan}`}>
             {slogan.split('\n').map((l, i) => <span key={i}>{i > 0 && <br />}{l}</span>)}
           </h1>

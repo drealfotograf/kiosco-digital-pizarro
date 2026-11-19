@@ -13,9 +13,11 @@ import { QUOTES } from '../components/Quotes.jsx';
 import { sizeColor, DEFAULT_ID_OPTIONS, SIZE_OUTPUTS, sizeOutput, ds620Supports } from '../../../shared/presets.js';
 
 const TABS = [
-  ['orders', 'Pedidos'], ['stats', 'Estadísticas'], ['general', 'General'], ['fonts', 'Letras'], ['print', 'Impresión y envío'], ['sizes', 'Tamaños'], ['printers', 'Impresoras'], ['tariffs', 'Tarifas'], ['lots', 'Lotes de carnet'],
-  ['sources', 'Fuentes de fotos'], ['lab', 'Laboratorio y galerías'], ['masks', 'Máscaras y eventos'], ['backup', 'Copia de seguridad']
+  ['orders', 'Pedidos'], ['stats', 'Estadísticas'], ['general', 'General'], ['fonts', 'Letras'], ['print', 'Impresión y envío'], ['sizes', 'Tamaños'], ['tariffs', 'Tarifas'], ['lots', 'Lotes de carnet'],
+  ['sources', 'Fuentes de fotos'], ['backup', 'Copia de seguridad']
 ];
+const GENERAL_SUBS = [['empresa', 'Empresa'], ['correo', 'Correo'], ['tiempos', 'Tiempos'], ['modos', 'Modos'], ['seguridad', 'Seguridad'], ['rgpd', 'RGPD']];
+const PRINT_SUBS = [['impresion', 'Impresión'], ['enviar', 'Enviar'], ['mascaras', 'Máscaras']];
 
 const tiersToText = (t = []) => t.map((x) => `${x.from}:${String(x.price).replace('.', ',')}`).join(' | ');
 const textToTiers = (txt) => String(txt || '').split('|').map((p) => p.split(':').map((v) => v.trim())).filter((p) => p.length === 2)
@@ -31,15 +33,20 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
   const [pin, setPin] = useState(initialPin);
   const [tab, setTab] = useState('orders');
   const [lotPaperTab, setLotPaperTab] = useState('10x15');
+  const [sub, setSub] = useState(null);
   const [paperAlerts, setPaperAlerts] = useState([]);
   useEffect(() => { api('printers:alerts').then(setPaperAlerts).catch(() => {}); }, [tab]); // Lotes de carnet: pestaña de papel abierta
   const [s, setS] = useState(null);
   const [printers, setPrinters] = useState([]);
   const [masks, setMasks] = useState([]);
   const [dirty, setDirty] = useState(false);
+  const [srvFolders, setSrvFolders] = useState(null);
+  const [srvErr, setSrvErr] = useState('');
 
   useEffect(() => { api('admin:settings', initialPin).then(setS); api('printers:list').then(setPrinters); loadMasks(); }, [initialPin]);
   const loadMasks = () => api('masks:list').then(setMasks);
+  const loadFolders = async () => { setSrvErr(''); try { const r = await api('admin:serverFolders', pin); setSrvFolders(r.folders || []); } catch (e) { setSrvFolders([]); setSrvErr(e.message); } };
+  useEffect(() => { if (tab === 'print' && sub === 'enviar' && (s?.delivery || {}).server) loadFolders(); }, [tab, sub, !!(s?.delivery || {}).server]); // eslint-disable-line react-hooks/exhaustive-deps
   const set = (path, value) => {
     setDirty(true);
     setS((old) => {
@@ -77,7 +84,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
       </div>
       <div className="admin" style={{ flex: 1, minHeight: 0 }}>
         <nav>
-          {TABS.map(([id, l]) => <button key={id} className={tab === id ? 'on' : ''} onClick={() => setTab(id)}>{l}{id === 'printers' && paperAlerts.length > 0 && <i className={`nav-dot ${paperAlerts.some((x) => x.level === 'empty') ? 'empty' : 'low'}`} title="Queda poco papel" />}</button>)}
+          {TABS.map(([id, l]) => <button key={id} className={tab === id ? 'on' : ''} onClick={() => { setTab(id); setSub(null); }}>{l}{id === 'print' && paperAlerts.length > 0 && <i className={`nav-dot ${paperAlerts.some((x) => x.level === 'empty') ? 'empty' : 'low'}`} title="Queda poco papel" />}</button>)}
           <div className="spacer" />
           <button className="btn danger" onClick={() => api('admin:quit', pin)}>Cerrar aplicación</button>
         </nav>
@@ -169,39 +176,225 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
           {tab === 'backup' && <AdminBackup s={s} set={set} pin={pin} pick={pick} toast={toast} dirty={dirty} setS={setS} />}
           {tab === 'stats' && <AdminStats pin={pin} settings={s} toast={toast} />}
           {tab === 'fonts' && <FontSettings s={s} set={set} />}
-          {tab === 'general' && <SecuritySettings s={s} set={set} pin={pin} toast={toast} dirty={dirty} />}
-
-          {tab === 'print' && <DeliverySettings s={s} set={set} pin={pin} pick={pick} toast={toast} dirty={dirty} printers={printers} />}
-
           {tab === 'general' && (
             <>
               <h2>General</h2>
-              <div className="form">
-                <label>Guardar pedidos y fotos durante (días)</label>{txt('ordersRetentionDays', { type: 'number', min: 1 })}
-                <label>Fotos del cliente</label>{chk('keepPhotosDefault', 'Guardarlas por defecto (el cliente puede pedir que se borren en el resumen del pedido)')}
-                <label style={{ gridColumn: '1 / -1', marginTop: 10, color: 'var(--navy)' }}>Datos legales (RGPD y aviso legal de la pantalla de inicio)</label>
-                <label>Nombre o razón social</label>{txt('legal.company')}
-                <label>NIF / CIF</label>{txt('legal.nif')}
-                <label>Dirección</label>{txt('legal.address')}
-                <label>Correo de contacto</label>{txt('legal.email')}
-                <label>Teléfono</label>{txt('legal.phone')}
-                <label>Delegado de protección de datos</label>{txt('legal.dpo', { placeholder: 'Opcional' })}
-                <label>Registro mercantil</label>{txt('legal.registry', { placeholder: 'Solo si es sociedad' })}
-                <label>Nombre de la tienda</label>{txt('storeName')}
-                <label>Moneda</label>{txt('currency')}
-                <label>PIN de administración</label>{txt('adminPin')}
-                <label>Volver al inicio tras (s)</label>{txt('idleSeconds', { type: 'number', min: 30 })}
-                <label>Resolución de impresión (ppp)</label>{txt('dpi', { type: 'number', min: 150, max: 600 })}
-                <label>Modo oscuro</label>{chk('darkMode', 'Interfaz con colores oscuros (reducir brillo en tiendas con poca luz)')}
-                <label>Modo kiosco</label>{chk('kioskMode', 'Pantalla completa bloqueada (requiere reiniciar la app)')}
-                <label>«Más tamaños»</label>
-                <select className="inp" value={s.otherSizeMode || 'temporary'} onChange={(e) => set('otherSizeMode', e.target.value)}>
-                  <option value="temporary">Puntual: el tamaño elegido solo se añade para ese cliente</option>
-                  <option value="permanent">Siempre: el tamaño elegido queda en la lista rápida</option>
-                </select>
+              <div className="sub-nav">
+                {GENERAL_SUBS.map(([id, l]) => <button key={id} className={`sub-btn ${sub === id ? 'on' : ''}`} onClick={() => setSub(sub === id ? null : id)}>{l}</button>)}
               </div>
+
+              {sub === 'empresa' && (
+                <div className="form">
+                  <label>Nombre de la tienda</label>{txt('storeName')}
+                  <label>Razón social</label>{txt('legal.company')}
+                  <label>NIF / CIF</label>{txt('legal.nif')}
+                  <label>Dirección</label>{txt('legal.address')}
+                  <label>Teléfono del gerente</label>{txt('legal.phone')}
+                  <label>Correo electrónico</label>{txt('legal.email')}
+                  <label>Página web</label>{txt('legal.web', { placeholder: 'https://www.tutienda.es' })}
+                </div>
+              )}
+
+              {sub === 'correo' && (
+                <>
+                  <div className="form">
+                    <label>Importación por correo</label>{chk('email.enabled', 'Recibir fotos por correo electrónico')}
+                    <label>Dirección para clientes</label>{txt('email.address', { placeholder: 'fotos@mitienda.com' })}
+                    <label>Filtro de asunto</label>
+                    <div className="col" style={{ gap: 4 }}>
+                      {txt('email.subjectFilter', { placeholder: 'imprimir' })}
+                      <span className="muted small">Solo se importan los correos que contengan esta palabra en el asunto.</span>
+                    </div>
+                    {chk('email.showAllButton', 'Mostrar botón para ver el resto de correos')}
+                    <label>Moneda</label>{txt('currency')}
+                  </div>
+                  {s.email?.enabled && (
+                    <div className="form" style={{ marginTop: 12 }}>
+                      <label>Servidor IMAP</label>{txt('email.host', { placeholder: 'imap.gmail.com' })}
+                      <label>Puerto</label>{txt('email.port', { type: 'number' })}
+                      <label>SSL/TLS</label>{chk('email.secure', 'Conexión segura')}
+                      <label>Usuario</label>{txt('email.user')}
+                      <label>Contraseña</label>{txt('email.pass', { type: 'password' })}
+                      <label>Comprobar cada (s)</label>{txt('email.pollSeconds', { type: 'number', min: 10 })}
+                    </div>
+                  )}
+                  {s.email?.enabled && (
+                    <div className="row" style={{ marginTop: 8 }}>
+                      <button className="btn" onClick={async () => { const r = await api('admin:testEmail', pin, s.email); toast(r.ok ? { type: 'ok', text: 'Conexión correcta' } : { type: 'error', text: r.error }); }}>Probar conexión</button>
+                      <span className="muted small">Usa un buzón exclusivo para el kiosco.</span>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {sub === 'tiempos' && (
+                <div className="form">
+                  <label>Volver al inicio tras (s)</label>{txt('idleSeconds', { type: 'number', min: 30 })}
+                  <label>Reloj</label>
+                  <p className="muted small" style={{ margin: 0 }}>El cambio de hora automático se gestiona desde Windows: Configuración → Hora e idioma → «Establecer hora automáticamente» y «Establecer zona horaria automáticamente».</p>
+                </div>
+              )}
+
+              {sub === 'modos' && (
+                <div className="form">
+                  <label>Modo oscuro</label>{chk('darkMode', 'Interfaz con colores oscuros (reducir brillo en tiendas con poca luz)')}
+                  <label>Modo kiosco</label>{chk('kioskMode', 'Pantalla completa bloqueada (requiere reiniciar la app)')}
+                </div>
+              )}
+
+              {sub === 'seguridad' && (
+                <>
+                  <div className="form">
+                    <label>PIN de administración</label>{txt('adminPin')}
+                  </div>
+                  <SecuritySettings s={s} set={set} pin={pin} toast={toast} dirty={dirty} />
+                </>
+              )}
+
+              {sub === 'rgpd' && (
+                <div className="form">
+                  <label>Responsable del tratamiento</label>
+                  <p className="muted small" style={{ margin: 0 }}>Los datos del responsable (razón social, NIF, dirección, correo y teléfono) se rellenan en la sección Empresa.</p>
+                  <label>Delegado de protección de datos</label>{txt('legal.dpo', { placeholder: 'Nombre y correo del DPO (opcional para pymes)' })}
+                  <label>Registro mercantil</label>{txt('legal.registry', { placeholder: 'Solo si es sociedad' })}
+                  <label>Guardar pedidos y fotos durante (días)</label>{txt('ordersRetentionDays', { type: 'number', min: 1 })}
+                  <label>Fotos del cliente</label>{chk('keepPhotosDefault', 'Guardarlas por defecto (el cliente puede pedir que se borren en el resumen)')}
+                  <label>«Más tamaños»</label>
+                  <select className="inp" value={s.otherSizeMode || 'temporary'} onChange={(e) => set('otherSizeMode', e.target.value)}>
+                    <option value="temporary">Puntual: el tamaño elegido solo se añade para ese cliente</option>
+                    <option value="permanent">Siempre: el tamaño elegido queda en la lista rápida</option>
+                  </select>
+                  <label style={{ gridColumn: '1 / -1', marginTop: 12 }}>Aviso legal y derechos</label>
+                  <p className="muted small" style={{ margin: 0 }}>El aviso legal de la pantalla de inicio se genera con los datos de Empresa. Incluye: identidad del responsable, finalidad (impresión de fotografías), base jurídica (ejecución de un contrato), plazo de conservación y derechos del interesado (acceso, rectificación, supresión, portabilidad, limitación y oposición ante la AEPD).</p>
+                </div>
+              )}
+
+              {!sub && <p className="muted" style={{ textAlign: 'center', marginTop: 40, fontSize: 15 }}>Selecciona una sección para ver sus ajustes.</p>}
             </>
           )}
+
+          {tab === 'print' && (() => {
+            const d = { print: true, server: false, serverFolder: 'Laboratorio', localFallback: '', retryMinutes: 5, ...(s.delivery || {}) };
+            const sd = (k, v) => set('delivery', { ...d, [k]: v });
+            return (
+            <>
+              <h2>Impresión y envío</h2>
+              <div className="sub-nav">
+                {PRINT_SUBS.map(([id, l]) => <button key={id} className={`sub-btn ${sub === id ? 'on' : ''}`} onClick={() => setSub(sub === id ? null : id)}>{l}</button>)}
+              </div>
+
+              {sub === 'impresion' && (
+                <>
+                  <div className="card col" style={{ maxWidth: 900 }}>
+                    <label className="row deliv-opt" style={{ gap: 12 }}>
+                      <input type="checkbox" checked={d.print !== false} onChange={(e) => sd('print', e.target.checked)} style={{ width: 28, height: 28 }} />
+                      <span className="col" style={{ gap: 2 }}><b>Imprimir en este kiosco</b><span className="muted small">Cada tamaño va a su impresora. Si un tamaño no tiene impresora, el pedido se envía al servidor.</span></span>
+                    </label>
+                  </div>
+                  <div className="form" style={{ maxWidth: 900 }}>
+                    <label>Resolución de impresión (ppp)</label>{txt('dpi', { type: 'number', min: 150, max: 600 })}
+                  </div>
+                  <AdminPrinterStatus pin={pin} printers={printers} setPrinters={setPrinters} toast={toast} s={s} set={set} save={save} dirty={dirty} />
+                  <TicketPinSettings s={s} set={set} printers={printers} />
+                  <div className="card col" style={{ maxWidth: 900 }}>
+                    <label className="row deliv-opt" style={{ gap: 12 }}>
+                      <input type="checkbox" checked={!!s.simPrinter?.enabled} onChange={(e) => set('simPrinter', { ...(s.simPrinter || {}), enabled: e.target.checked })} style={{ width: 28, height: 28 }} />
+                      <span className="col" style={{ gap: 2 }}><b>Simular impresora DNP DS620 (pruebas)</b><span className="muted small">Los tamaños sin impresora se «imprimen» como JPEG en una carpeta. Desactívalo cuando conectes la impresora real.</span></span>
+                    </label>
+                    {s.simPrinter?.enabled && (
+                      <div className="row" style={{ flexWrap: 'nowrap' }}>
+                        <input className="inp" value={s.simPrinter?.folder || ''} placeholder={'Documentos\\KioscoPizarro\\Impresora simulada'} onChange={(e) => set('simPrinter', { ...s.simPrinter, folder: e.target.value })} />
+                        <button className="btn sm" onClick={() => pick('simPrinter.folder')}>Elegir</button>
+                        <button className="btn sm" onClick={() => api('admin:openSimFolder', pin).catch((e) => toast({ type: 'error', text: e.message }))}>Abrir</button>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {sub === 'enviar' && (
+                <>
+                  <div className="card col" style={{ maxWidth: 900 }}>
+                    <label className="row deliv-opt" style={{ gap: 12 }}>
+                      <input type="checkbox" checked={!!d.server} onChange={(e) => sd('server', e.target.checked)} style={{ width: 28, height: 28 }} />
+                      <span className="col" style={{ gap: 2 }}><b>Enviar al servidor</b><span className="muted small">Copia en JPEG en una carpeta del servidor.</span></span>
+                    </label>
+                  </div>
+                  <h3>Conexión con el laboratorio</h3>
+                  <div className="form" style={{ maxWidth: 900 }}>
+                    <label>Modo</label>
+                    <select className="inp" value={(s.lab || {}).mode || 'http'} onChange={(e) => set('lab.mode', e.target.value)}>
+                      <option value="http">Servidor de la tienda (recomendado)</option>
+                      <option value="folder">Carpeta compartida / carpeta caliente</option>
+                    </select>
+                    <label>Dirección del servidor</label>{txt('lab.serverUrl', { placeholder: 'http://192.168.1.10:4000' })}
+                    <label>Clave del kiosco</label>{txt('lab.kioskKey', { type: 'password' })}
+                    {(s.lab || {}).mode === 'folder' && <><label>Carpeta del laboratorio</label><div className="row" style={{ flexWrap: 'nowrap' }}>{txt('lab.folder')}<button className="btn sm" onClick={() => pick('lab.folder')}>Elegir</button></div></>}
+                  </div>
+                  <p className="muted small">La dirección del servidor también se usa para las galerías privadas de los clientes.</p>
+                  <div className="row"><button className="btn" disabled={dirty} onClick={async () => { const r = await api('admin:testLab', pin); toast(r.ok ? { type: 'ok', text: 'Conexión correcta' } : { type: 'error', text: r.error }); }}>Probar conexión</button>{dirty && <span className="muted small">Guarda antes de probar</span>}</div>
+                  {d.server && (
+                    <div className="form" style={{ maxWidth: 900, marginTop: 12 }}>
+                      <label>Carpeta de destino en el servidor</label>
+                      <div className="col" style={{ gap: 6 }}>
+                        <div className="row" style={{ flexWrap: 'nowrap' }}>
+                          <input className="inp" list="srv-folders" value={d.serverFolder || ''} onChange={(e) => sd('serverFolder', e.target.value)} placeholder="Laboratorio" />
+                          <datalist id="srv-folders">{(srvFolders || []).map((f) => <option key={f} value={f} />)}</datalist>
+                          <button className="btn sm" onClick={loadFolders}>Actualizar</button>
+                        </div>
+                        {srvFolders && srvFolders.length > 0 && <div className="row" style={{ gap: 6 }}>{srvFolders.map((f) => <button key={f} className={`chip sm ${d.serverFolder === f ? 'on' : ''}`} onClick={() => sd('serverFolder', f)}>{f}</button>)}</div>}
+                        {srvErr ? <span className="small" style={{ color: 'var(--err)' }}>No se pueden leer las carpetas: {srvErr}</span> : <span className="muted small">Subcarpetas de la «carpeta raíz de exportación» del servidor.</span>}
+                      </div>
+                      <label>Si el servidor no responde, guardar en</label>
+                      <div className="row" style={{ flexWrap: 'nowrap' }}>
+                        <input className="inp" value={d.localFallback || ''} onChange={(e) => sd('localFallback', e.target.value)} placeholder={'C:\\KioscoPizarro\\Pendientes'} />
+                        <button className="btn sm" onClick={() => pick('delivery.localFallback')}>Elegir</button>
+                      </div>
+                      <label>Reintentar el envío cada</label>
+                      <div className="row" style={{ flexWrap: 'nowrap' }}><input className="inp" type="number" min="1" max="120" style={{ width: 110 }} value={d.retryMinutes} onChange={(e) => sd('retryMinutes', Math.max(1, Number(e.target.value) || 5))} /><span className="muted">minutos</span></div>
+                    </div>
+                  )}
+                  {d.server && (
+                    <div className="row">
+                      <button className="btn" disabled={dirty} onClick={async () => {
+                        try { const n = await api('admin:retryPending', pin); toast({ type: 'ok', text: n ? `${n} pedido(s) pendientes enviados` : 'No hay pedidos pendientes' }); } catch (e) { toast({ type: 'error', text: e.message }); }
+                      }}>Reintentar pendientes ahora</button>
+                      {dirty && <span className="muted small">Guarda antes de reintentar</span>}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {sub === 'mascaras' && (
+                <>
+                  <h3>Máscaras y marcos para eventos</h3>
+                  <p className="muted" style={{ margin: 0 }}>Imágenes PNG con transparencia. Se adaptan al tamaño de copia y se giran si la foto es horizontal.</p>
+                  <div className="form">
+                    <label>Máscara del evento activo</label>
+                    <select className="inp" value={(s.masks || {}).activeEventMask || ''} onChange={(e) => set('masks.activeEventMask', e.target.value)}>
+                      <option value="">Ninguna (el cliente elige)</option>
+                      {masks.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
+                    </select>
+                  </div>
+                  <div className="masks">
+                    {masks.map((m) => (
+                      <div key={m.name} className="m col" style={{ gap: 6 }}>
+                        <img src={fileUrl(m.path)} alt="" />
+                        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', background: '#fff', borderRadius: 8, padding: '2px 6px' }}>
+                          <span className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                          <button className="btn sm danger" onClick={async () => { await api('masks:remove', pin, m.name); loadMasks(); }}><Icon name="trash" size={16} /></button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="row"><button className="btn" onClick={async () => { await api('masks:add', pin); loadMasks(); }}><Icon name="plus" /> Añadir máscaras PNG</button></div>
+                </>
+              )}
+
+              {!sub && <p className="muted" style={{ textAlign: 'center', marginTop: 40, fontSize: 15 }}>Selecciona una sección para ver sus ajustes.</p>}
+            </>
+            );
+          })()}
 
           {tab === 'sizes' && (
             <>
@@ -251,7 +444,6 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
             </>
           )}
 
-          {tab === 'printers' && <AdminPrinterStatus pin={pin} printers={printers} setPrinters={setPrinters} toast={toast} s={s} set={set} save={save} dirty={dirty} />}
           {tab === 'sources' && (
             <>
               <h2>Mi galería (solo personal)</h2>
@@ -301,67 +493,10 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
               ))}
               <div className="row"><button className="btn" onClick={() => set('shareFolders', [...s.shareFolders, { name: 'Fotos compartidas', path: '' }])}><Icon name="plus" /> Añadir carpeta</button></div>
 
-              <h2>Correo electrónico (IMAP)</h2>
-              <div className="form">
-                <label>Activar</label>{chk('email.enabled', 'Recibir fotos por correo')}
-                <label>Dirección para clientes</label>{txt('email.address', { placeholder: 'fotos@mitienda.com' })}
-                <label>Servidor IMAP</label>{txt('email.host', { placeholder: 'imap.gmail.com' })}
-                <label>Puerto</label>{txt('email.port', { type: 'number' })}
-                <label>SSL/TLS</label>{chk('email.secure', 'Conexión segura')}
-                <label>Usuario</label>{txt('email.user')}
-                <label>Contraseña</label>{txt('email.pass', { type: 'password' })}
-                <label>Comprobar cada (s)</label>{txt('email.pollSeconds', { type: 'number', min: 10 })}
-              </div>
-              <div className="row">
-                <button className="btn" onClick={async () => { const r = await api('admin:testEmail', pin, s.email); toast(r.ok ? { type: 'ok', text: 'Conexión correcta' } : { type: 'error', text: r.error }); }}>Probar conexión</button>
-                <span className="muted small">Usa un buzón exclusivo para el kiosco (con Gmail, una «contraseña de aplicación»).</span>
-              </div>
             </>
           )}
 
-          {tab === 'lab' && (
-            <>
-              <h2>Envío al laboratorio</h2>
-              <div className="form">
-                <label>Modo</label>
-                <select className="inp" value={s.lab.mode} onChange={(e) => set('lab.mode', e.target.value)}>
-                  <option value="http">Servidor de la tienda (recomendado)</option>
-                  <option value="folder">Carpeta compartida / carpeta caliente</option>
-                </select>
-                <label>Dirección del servidor</label>{txt('lab.serverUrl', { placeholder: 'http://192.168.1.10:4000' })}
-                <label>Clave del kiosco</label>{txt('lab.kioskKey', { type: 'password' })}
-                {s.lab.mode === 'folder' && <><label>Carpeta del laboratorio</label><div className="row" style={{ flexWrap: 'nowrap' }}>{txt('lab.folder')}<button className="btn sm" onClick={() => pick('lab.folder')}>Elegir</button></div></>}
-              </div>
-              <p className="muted small">La dirección del servidor también se usa para las galerías privadas de los clientes.</p>
-              <div className="row"><button className="btn" disabled={dirty} onClick={async () => { const r = await api('admin:testLab', pin); toast(r.ok ? { type: 'ok', text: 'Conexión correcta' } : { type: 'error', text: r.error }); }}>Probar conexión</button>{dirty && <span className="muted small">Guarda antes de probar</span>}</div>
-            </>
-          )}
 
-          {tab === 'masks' && (
-            <>
-              <h2>Máscaras y marcos para eventos</h2>
-              <p className="muted" style={{ margin: 0 }}>Imágenes PNG con transparencia (por ejemplo 1200 x 1800 px). Se adaptan al tamaño de copia y se giran si la foto es horizontal.</p>
-              <div className="form">
-                <label>Máscara del evento activo</label>
-                <select className="inp" value={s.masks.activeEventMask} onChange={(e) => set('masks.activeEventMask', e.target.value)}>
-                  <option value="">Ninguna (el cliente elige)</option>
-                  {masks.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                </select>
-              </div>
-              <div className="masks">
-                {masks.map((m) => (
-                  <div key={m.name} className="m col" style={{ gap: 6 }}>
-                    <img src={fileUrl(m.path)} alt="" />
-                    <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', background: '#fff', borderRadius: 8, padding: '2px 6px' }}>
-                      <span className="small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                      <button className="btn sm danger" onClick={async () => { await api('masks:remove', pin, m.name); loadMasks(); }}><Icon name="trash" size={16} /></button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="row"><button className="btn" onClick={async () => { await api('masks:add', pin); loadMasks(); }}><Icon name="plus" /> Añadir máscaras PNG</button></div>
-            </>
-          )}
         </section>
       </div>
     </div>

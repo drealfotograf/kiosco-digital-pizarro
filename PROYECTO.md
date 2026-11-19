@@ -422,7 +422,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 - [x] Fotos carnet: ocho formatos y uno personalizado, guías de cara, lotes, «cada persona en su propia hoja», hojas de 10x15, 13x18 y A4, guías de corte (sin guías, marcas o líneas) y separación ajustable.
 - [x] Máscaras de ejemplo («Marco blanco» y «Evento - Nuestro gran día») y gestión de máscaras en Administración.
 - [x] Galerías con contraseña (servidor, web del cliente e importación desde el kiosco).
-- [x] Administración del kiosco en seis pestañas: General, Tamaños e impresoras, Fotos carnet, Fuentes, Laboratorio y galerías, y Máscaras.
+- [x] Administración del kiosco reorganizada: General (Empresa / Correo / Tiempos / Modos / Seguridad / RGPD), Impresión y envío (Impresión / Enviar / Máscaras), Tamaños, Tarifas, Lotes de carnet, Fuentes de fotos y Copia de seguridad. Cada sección usa sub-navegación por botones.
 - [x] Pruebas automáticas de principio a fin (todas superadas):
   - Importación, orientación EXIF y duplicados.
   - Copias de 10x15 a 1205x1795 px y 300 ppp.
@@ -496,6 +496,13 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
   - Recorte facial automático para carnet (`faceCrop`).
   - Vista previa de impresión (simulación a escala del papel con borde, Polaroid y recorte).
   - Vista cuadrícula a pantalla completa para las miniaturas.
+- [x] **Correcciones (18/11/2026):**
+  - Animación de eslóganes: `overflow: visible` en `.brand-slogan-wrap` para que el texto no se corte durante las transiciones.
+  - Persistencia del encuadre: `CropEditor.onUp` llama a `commit()` al soltar, y `printSpec()` usa refs para leer siempre el estado más reciente.
+  - Exportación de tarifas: se genera CSV (Excel) + JSON con el mismo nombre `AAAA-MM-DD_tarifa`, numeración `(1)`, `(2)`… si ya existe. Diálogo de carpeta en vez de archivo.
+- [x] **Tamaños redondos y persistencia de lotes (18/11/2026):**
+  - **Corte circular:** cada tamaño de impresión puede activar «Corte redondo» en Tarifas. La foto se recorta en forma circular inscrita en la dimensión menor del papel. Implementado en: `CropEditor` (guía circular con `RoundGuide`), `Studio` (pasa `round` al editor y clip circular en la vista previa), `App.jsx` (`printSpec` incluye `round`), `render.js` (máscara SVG con `dest-in`) y `AdminTariffs` (checkbox).
+  - **Encuadre persistente entre lotes de carnet:** al añadir otro lote, `newLot()` conserva `crop`, `cropBig`, `angle` y `adjust` del lote anterior.
 
 ### Pendiente
 - [ ] **Elegir la carpeta del servidor para las copias de seguridad** (Ajustes → Copia de seguridad). Sin ella no se hacen copias.
@@ -802,3 +809,39 @@ cd kiosk && npm install && npm start
 - **Recorte facial (carnet):** función `faceCrop` en `layout.js`, desplaza el encuadre un 12% hacia la cara.
 - **Vista previa de impresión:** botón «Vista previa» junto a «Continuar» en la zona de selección. Modal con simulación a escala del papel, borde, Polaroid y recorte.
 - **Vista cuadrícula completa:** botón en las miniaturas para expandir la cuadrícula a toda la zona central (útil con cientos de fotos). Al tocar una foto se vuelve a la vista normal.
+
+### 18/11/2026 · Correcciones de animación, encuadre y exportación
+- **Animación de inicio:** el texto de los eslóganes se cortaba durante la transición (scale + translate). Corregido con `overflow: visible` en `.brand-slogan-wrap` (`styles.css`).
+- **Encuadre persistente:** al modificar el encuadre después de marcar copias, el último ajuste no se guardaba. Dos correcciones:
+  1. `CropEditor.jsx`: `onUp` llama a `commit()` (o `commitFit()`) al soltar todos los dedos.
+  2. `App.jsx`: `printSpec()` usa `editsRef` / `itemsRef` / `rollRef` en vez de las variables de cierre, para leer siempre el estado más reciente de React 19.
+- **Exportación de tarifas:** ahora genera dos archivos (CSV para Excel y JSON) con el mismo nombre `AAAA-MM-DD_tarifa`. Si ya existe, añade `(1)`, `(2)`, etc. El diálogo pide una carpeta en vez de un archivo. Botón y toast actualizados a «Excel + JSON».
+
+### 18/11/2026 · Tamaños redondos y encuadre persistente entre lotes
+- **Corte circular por tamaño:** nuevo campo `round` en las tarifas. Cuando está activo:
+  - `CropEditor.jsx`: nuevo componente `RoundGuide` que dibuja una guía circular (SVG `evenodd`) inscrita en la dimensión menor.
+  - `Studio.jsx`: pasa `round={!!curSize.round}` al editor y aplica `borderRadius: 50%` en la ventana de la vista previa de impresión.
+  - `App.jsx`: `printSpec()` incluye `round: !!size?.round` en cada copia.
+  - `render.js`: máscara SVG circular con composición `dest-in` sobre el render final.
+  - `AdminTariffs.jsx`: checkbox «Corte redondo» en el editor de tarifa.
+- **Encuadre persistente entre lotes de carnet:** `newLot()` en `IdLots.jsx` ahora acepta `crop`, `cropBig`, `angle` y `adjust` del lote anterior (`from`). `addAnother()` ya pasaba `cur` como `from`, así que el cambio se propaga automáticamente.
+
+### 18/11/2026 20:36 – 20:49 · Sesión cerrada (guardado automático, 13 min)
+- Archivos modificados:
+  - `kiosk/renderer/src/screens/Studio.jsx`
+
+### 19/11/2026 · Reorganización del panel de Administración
+- **Admin.jsx:** pestañas reducidas de 13 a 10 (eliminadas Impresoras, Laboratorio y Máscaras como pestañas independientes).
+- **Sub-navegación:** nuevos botones de sección dentro de General (Empresa, Correo, Tiempos, Modos, Seguridad, RGPD) e Impresión y envío (Impresión, Enviar, Máscaras).
+- **General → Empresa:** nombre tienda, razón social, NIF, dirección, teléfono, correo, web.
+- **General → Correo:** importación por email con filtro de asunto, configuración IMAP y test de conexión.
+- **General → Tiempos:** tiempo de inactividad y nota sobre reloj de Windows.
+- **General → Modos:** modo oscuro y modo kiosco.
+- **General → Seguridad:** PIN de administración y 2FA (TOTP).
+- **General → RGPD:** DPO, registro mercantil, retención de datos, fotos del cliente, «Más tamaños» y aviso legal.
+- **Impresión → Impresión:** checkbox imprimir, resolución DPI, impresoras (AdminPrinterStatus), ticket/PIN, impresora simulada.
+- **Impresión → Enviar:** checkbox servidor, conexión con laboratorio, carpeta destino, respaldo local, reintento.
+- **Impresión → Máscaras:** máscara de evento activo, galería de máscaras, añadir/eliminar.
+- **CSS:** nuevas clases `.sub-nav` y `.sub-btn` con estilo de botones redondeados.
+- **Home.jsx:** eliminado el texto «Impresión fotográfica» de la pantalla de espera.
+- **Build y kiosco reiniciado:** compila correctamente y la ventana se abre.

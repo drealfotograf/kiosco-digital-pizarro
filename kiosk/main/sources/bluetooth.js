@@ -6,11 +6,22 @@ import { walkFiles } from '../images.js';
 
 // Windows recibe archivos por Bluetooth con el asistente "fsquirt" (Recibir archivos).
 // Configura en el asistente la carpeta de destino = carpeta "bluetoothInbox" de los ajustes.
+let btProc = null;
+
 export function openBluetoothReceiver() {
+  if (btProc && !btProc.killed) return { ok: true, already: true };
   const exe = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'fsquirt.exe');
   if (!fs.existsSync(exe)) return { ok: false, error: 'Este equipo no tiene Bluetooth disponible.' };
-  spawn(exe, ['-receive'], { detached: true, stdio: 'ignore' }).unref();
+  btProc = spawn(exe, ['-receive'], { detached: true, stdio: 'ignore' });
+  btProc.on('exit', () => { btProc = null; });
+  btProc.unref();
   return { ok: true };
+}
+
+export function closeBluetoothReceiver() {
+  if (!btProc || btProc.killed) return;
+  try { process.kill(btProc.pid); } catch {}
+  btProc = null;
 }
 
 export function bluetoothInbox() {

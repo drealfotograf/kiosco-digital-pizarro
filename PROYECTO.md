@@ -846,6 +846,13 @@ cd kiosk && npm install && npm start
 - **Home.jsx:** eliminado el texto «Impresión fotográfica» de la pantalla de espera.
 - **Build y kiosco reiniciado:** compila correctamente y la ventana se abre.
 
+### 19/11/2026 · Bluetooth automático con barra de progreso
+- **Activación automática:** al entrar en el panel Bluetooth, `fsquirt -receive` se lanza solo (sin botón manual). Paso 1 muestra confirmación verde.
+- **Barra de progreso:** mientras no llegan archivos, barra animada pulsante. Cuando llegan, se muestran como chips con nombre y animación de entrada.
+- **Desactivación al salir:** `closeBluetoothReceiver()` mata el proceso `fsquirt` al desmontar el panel BT y al limpiar la sesión (`session:clear`), para que no quede abierto si el cliente se va sin hacer pedido.
+- **Archivos modificados:** bluetooth.js (open/close con tracking del proceso), main.js (handler `bt:close` + close en session:clear), Sources.jsx (BluetoothPanel rediseñado), styles.css (animación pulsante y chips BT).
+- **Build correcto y kiosco reiniciado.**
+
 ### 19/11/2026 · Tamaños redondos, persistencia de encuadre y corrección de stale-closure
 - **Tamaños redondos (corte circular):** cada tamaño puede activar «Corte redondo» en Tarifas. CropEditor muestra guía circular, Studio pasa `round` y aplica clip en preview, `printSpec` incluye `round`, `render.js` usa máscara SVG `dest-in`, AdminTariffs añade checkbox.
 - **Encuadre persistente entre lotes de carnet:** `newLot()` conserva `crop`, `cropBig`, `angle` y `adjust` del lote anterior.

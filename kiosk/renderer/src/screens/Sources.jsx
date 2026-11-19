@@ -292,25 +292,52 @@ function CablePanel({ load }) {
 function BluetoothPanel({ load }) {
   const [files, setFiles] = useState([]);
   const [msg, setMsg] = useState('');
+  const [active, setActive] = useState(false);
+  const prevCount = React.useRef(0);
+
   useEffect(() => {
-    const tick = () => api('bt:recent').then((f) => setFiles((old) => (old.length === f.length ? old : f))).catch(() => {});
+    let cancelled = false;
+    api('bt:open').then((r) => {
+      if (cancelled) return;
+      setActive(r.ok);
+      setMsg(r.ok ? 'Recepción activada. Envía las fotos desde tu móvil.' : r.error || '');
+    });
+    const tick = () => api('bt:recent').then((f) => { if (!cancelled) setFiles((old) => (old.length === f.length ? old : f)); }).catch(() => {});
     tick();
-    const t = setInterval(tick, 3000);
-    return () => clearInterval(t);
+    const t = setInterval(tick, 2000);
+    return () => { cancelled = true; clearInterval(t); api('bt:close').catch(() => {}); };
   }, []);
-  const open = async () => { const r = await api('bt:open'); setMsg(r.ok ? 'Recepción activada. Envía las fotos desde tu móvil a este equipo.' : r.error); };
+
+  const newCount = files.length - prevCount.current;
+  useEffect(() => { prevCount.current = files.length; }, [files.length]);
+
   return (
     <>
       <h2>Recibir por Bluetooth</h2>
       <div className="steps">
-        <div className="step"><b>1</b>Pulsa <strong>Activar recepción</strong>.</div>
-        <div className="step"><b>2</b>En tu móvil: Compartir → Bluetooth → elige este kiosco.</div>
+        <div className="step"><b>1</b>{active ? <span style={{ color: 'var(--ok)' }}>Recepción Bluetooth activada <Icon name="check" size={18} /></span> : 'Activando recepción Bluetooth…'}</div>
+        <div className="step"><b>2</b>En tu móvil: <strong>Compartir → Bluetooth</strong> → elige este kiosco.</div>
         <div className="step"><b>3</b>Cuando terminen de llegar, pulsa <strong>Cargar</strong>.</div>
       </div>
-      <div className="row"><button className="btn" onClick={open}><Icon name="bt" /> Activar recepción</button><span className="muted">{msg}</span></div>
-      <div className="load-bar">
-        <b>{files.length ? `${files.length} archivo${files.length === 1 ? '' : 's'} recibido${files.length === 1 ? '' : 's'}` : 'Esperando archivos…'}</b>
-        <button className="btn primary lg" disabled={!files.length} onClick={() => load(async () => localFiles(files), 'Bluetooth')}><Icon name="download" /> Cargar</button>
+      {msg && <div className="muted" style={{ marginBottom: 8 }}>{msg}</div>}
+      {!active && <div className="row"><button className="btn" onClick={async () => { const r = await api('bt:open'); setActive(r.ok); setMsg(r.ok ? 'Recepción activada.' : r.error || ''); }}><Icon name="bt" /> Activar recepción</button></div>}
+      <div className="card col" style={{ gap: 8 }}>
+        <div className="row" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+          <b>{files.length ? `${files.length} archivo${files.length === 1 ? '' : 's'} recibido${files.length === 1 ? '' : 's'}` : 'Esperando archivos…'}</b>
+          {files.length > 0 && <button className="btn primary lg" onClick={() => load(async () => localFiles(files), 'Bluetooth')}><Icon name="download" /> Cargar</button>}
+        </div>
+        {active && !files.length && (
+          <div className="progress"><i className="pulse" style={{ width: '30%' }} /></div>
+        )}
+        {files.length > 0 && (
+          <div className="bt-files">
+            {files.map((f, i) => (
+              <div key={f.path} className={`bt-file ${i >= files.length - newCount ? 'bt-new' : ''}`}>
+                <Icon name="check" size={16} /> <span>{f.name}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </>
   );

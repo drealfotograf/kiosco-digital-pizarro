@@ -13,7 +13,7 @@ import { listDrives, watchDrives, stopWatchingDrives } from './sources/drives.js
 import { listPhones, copyFromPhone, cancelPhoneCopy } from './sources/mtp.js';
 import { startUploadServer, uploadInfo } from './sources/upload-server.js';
 import { startEmailWatch, stopEmailWatch, emailStatus, testEmail } from './sources/email.js';
-import { openBluetoothReceiver, bluetoothInbox, recentBluetoothFiles } from './sources/bluetooth.js';
+import { openBluetoothReceiver, closeBluetoothReceiver, bluetoothInbox, recentBluetoothFiles } from './sources/bluetooth.js';
 import { listServerShare, downloadServerFile } from './sources/srvshare.js';
 import { ensureSampleMasks, renderPhotoBuffer, saveJpeg } from './render.js';
 import { listPrinters, testPrint, simFolder, enqueuePrint, getPrintQueue } from './print.js';
@@ -366,7 +366,7 @@ function registerIpc() {
   });
   handle('session:get', () => session.sessionView());
   handle('session:clear', async () => {
-    stopEmailWatch(); cancelPhoneCopy(); stopWatchingDrives();
+    stopEmailWatch(); cancelPhoneCopy(); stopWatchingDrives(); closeBluetoothReceiver();
     browseRoots = new Set();
     await session.clearSession();
     return true;
@@ -451,6 +451,7 @@ function registerIpc() {
 
   // Bluetooth
   handle('bt:open', () => openBluetoothReceiver());
+  handle('bt:close', () => { closeBluetoothReceiver(); return true; });
   handle('bt:recent', () => { const s = session.getSession(); return recentBluetoothFiles(s ? s.startedAt : Date.now()); });
   handle('bt:inbox', () => bluetoothInbox());
 

@@ -2,6 +2,7 @@
 node_modules/
 kiosk/dist-renderer/
 kiosk/dist/
+kiosk/installer/
 
 # DATOS PRIVADOS DEL SERVIDOR: contraseñas, clave del kiosco, pedidos y fotos de clientes
 server/data/

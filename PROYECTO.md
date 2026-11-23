@@ -513,7 +513,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 - [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP, Canon Selphy, Fuji ASK, Mitsubishi o HiTi) y ajustar los precios reales.
 - [ ] Probar **móvil por cable** (Android e iPhone), **Bluetooth** y **correo IMAP** con dispositivos y buzón reales.
 - [ ] Revisar el diseño del **panel de administración del servidor** web (`server/public`) para igualarlo al nuevo estilo del kiosco.
-- [ ] Generar el **instalador** (`npm run dist`) y probarlo en el PC del kiosco. Valorar que la app arranque sola con Windows.
+- [x] Generar el **instalador** (`npm run dist`): `Kiosco Digital Pizarro Setup 0.1.0.exe` (NSIS, 122 MB, en español, instalación por máquina). Probarlo en el PC del kiosco. Valorar que la app arranque sola con Windows.
 - [ ] Hacer que el servidor arranque como servicio de Windows (por ejemplo con NSSM o el Programador de tareas).
 - [ ] Opcional: publicar las galerías para verlas desde casa (abrir puertos, usar un túnel o pasar a la nube).
 
@@ -524,7 +524,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 1. Configurar las impresoras reales en Administración → Tamaños e impresoras y hacer impresiones de prueba.
 2. Prueba en la tienda con móviles reales (WiFi QR, cable y Bluetooth) y con el correo.
 3. Igualar el estilo del panel web del servidor.
-4. Generar el instalador y dejar kiosco y servidor arrancando solos.
+4. ~~Generar el instalador~~ Hecho. Dejar kiosco y servidor arrancando solos con Windows.
 
 ---
 
@@ -893,3 +893,41 @@ cd kiosk && npm install && npm start
   - `App.jsx`: muestra un toast al descubrir nuevas impresoras.
 - **CSP corregido:** añadido `font-src 'self' data:` al Content-Security-Policy de `index.html` para que las fuentes embebidas por Vite no se bloqueen (causaba pantalla en blanco).
 - **Build correcto.**
+
+### 23/11/2026 10:10 – 10:41 · Sesión cerrada (guardado automático, 31 min)
+- Archivos modificados:
+  - `kiosk/electron-err.txt`
+  - `kiosk/electron-err2.txt`
+  - `kiosk/electron-err3.txt`
+  - `kiosk/electron-log.txt`
+  - `kiosk/electron-out.txt`
+  - `kiosk/electron-out2.txt`
+  - `kiosk/electron-out3.txt`
+  - `kiosk/main/main.js`
+  - `kiosk/main/preload.cjs`
+  - `kiosk/main/print.js`
+  - `kiosk/renderer/index.html`
+  - `kiosk/renderer/src/App.jsx`
+
+### 23/11/2026 · Instalador NSIS
+- **Instalador Windows generado:** `Kiosco Digital Pizarro Setup 0.1.0.exe` (122 MB, NSIS).
+  - Configuración en `package.json` → `build`: icono propio, instalación por máquina, permite elegir directorio, idioma español (código 1034), acceso directo «Kiosco Pizarro».
+  - Script `scripts/make-icon.js` genera `build/icon.png` (256×256) a partir del logo SVG con esquinas y la P.
+  - `.gitignore` actualizado para excluir `kiosk/installer/`.
+  - Módulos nativos (sharp, @napi-rs/canvas) desempaquetados del asar.
+  - Sin firma de código (no hay certificado configurado); Windows mostrará SmartScreen la primera vez.
+
+### 23/11/2026 10:10 – 10:41 · Sesión cerrada (guardado automático, 31 min)
+- Archivos modificados:
+  - `kiosk/electron-err.txt`
+  - `kiosk/electron-err2.txt`
+  - `kiosk/electron-err3.txt`
+  - `kiosk/electron-log.txt`
+  - `kiosk/electron-out.txt`
+  - `kiosk/electron-out2.txt`
+  - `kiosk/electron-out3.txt`
+  - `kiosk/main/main.js`
+  - `kiosk/main/preload.cjs`
+  - `kiosk/main/print.js`
+  - `kiosk/renderer/index.html`
+  - `kiosk/renderer/src/App.jsx`

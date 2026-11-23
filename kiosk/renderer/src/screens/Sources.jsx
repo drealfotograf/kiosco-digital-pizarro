@@ -38,7 +38,7 @@ export default function Sources({ session, settings, flow, roll, initial = 'usb'
   // Con «only» (Mi galería) solo se ven esas entradas de red; si no, todas menos la galería, que es solo del personal.
   const visible = only
     ? SOURCES.filter((s) => only.includes(s.id))
-    : SOURCES.filter((s) => s.id !== 'gallery' && (s.id !== 'share' || shares.length) && (s.id !== 'email' || settings.email.enabled) && (s.id !== 'server' || settings.lab.serverUrl));
+    : SOURCES.filter((s) => s.id !== 'gallery' && (s.id !== 'share' || shares.length) && (s.id !== 'email' || settings.email.enabled) && (s.id !== 'server' || settings.lab.serverUrl) && (s.id !== 'wifi' || settings.upload?.enabled !== false) && (s.id !== 'bt' || settings.bluetoothEnabled !== false));
   const allowedShares = only ? (settings.galleryNet || []).filter((x) => x.startsWith('share:')).map((x) => x.slice(6)) : null;
 
   const load = async (getFiles, origin) => {

@@ -133,7 +133,7 @@ export const DEFAULT_SETTINGS = {
   ordersRetentionDays: 30,
   // Datos del responsable para la información RGPD y el aviso legal de la pantalla de inicio.
   legal: { company: '', nif: '', address: '', email: '', phone: '', dpo: '', registry: '' },
-  upload: { port: 8787, wifiSsid: '', wifiPassword: '', wifiType: 'WPA' },
+  upload: { enabled: true, port: 8787, wifiSsid: '', wifiPassword: '', wifiType: 'WPA' },
   shareFolders: [],
   // «Mi galería» (solo personal, con PIN): entradas de red permitidas. 'gallery', 'server' y 'share:<ruta>'.
   galleryNet: ['gallery', 'server'],
@@ -143,6 +143,7 @@ export const DEFAULT_SETTINGS = {
   backup: { enabled: true, days: [0, 1, 2, 3, 4, 5, 6], from: '14:00', to: '16:00', parts: { settings: true, orders: true, stats: true, masks: true }, mode: 'incremental', folder: '', keepDays: 15, fullEvery: 7 },
   // Verificación tras 5 PIN erróneos: app de autenticación en el móvil de la empresa (TOTP) y/o código por correo (SMTP).
   security: { totpEnabled: false, totpSecret: '', email: '', smtp: { host: '', port: 587, secure: false, user: '', pass: '', from: '' } },
+  bluetoothEnabled: true,
   bluetoothInbox: 'C:\\KioscoPizarro\\Bluetooth',
   showFixedDrives: false,
   email: { enabled: false, address: '', host: '', port: 993, secure: true, user: '', pass: '', pollSeconds: 20 },

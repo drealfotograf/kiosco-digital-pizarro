@@ -18,10 +18,33 @@ const WIN_COLOR = path.join(process.env.WINDIR || 'C:\\Windows', 'System32', 'sp
 
 // Consumibles: capacidad del rollo y unidades que gasta cada formato (por medidas de la copia, en mm).
 export const MEDIA = {
+  // --- DNP DS620 ---
   'ds620-6x4': { label: 'DNP DS620 · 6x4" (400 copias)', capacity: 400, uses: [[102, 152, 1], [51, 152, 0.5]] },
   'ds620-5x7': { label: 'DNP DS620 · 5x7" (230 copias)', capacity: 230, uses: [[127, 178, 1], [89, 127, 0.5]] },
   'ds620-6x8': { label: 'DNP DS620 · 6x8" (200 hojas, 400 de 10x15)', capacity: 200, uses: [[152, 203, 1], [102, 152, 0.5], [51, 152, 0.25]] },
   'ds620-6x9': { label: 'DNP DS620 · 6x9" (180 copias)', capacity: 180, uses: [[152, 229, 1], [102, 152, 0.5]] },
+  // --- DNP DS-RX1 ---
+  'dsrx1-4x6': { label: 'DNP DS-RX1 · 4x6" (700 copias)', capacity: 700, uses: [[102, 152, 1]] },
+  'dsrx1-5x7': { label: 'DNP DS-RX1 · 5x7" (350 copias)', capacity: 350, uses: [[127, 178, 1]] },
+  // --- DNP DS820 ---
+  'ds820-8x10': { label: 'DNP DS820 · 8x10" (130 copias)', capacity: 130, uses: [[203, 254, 1], [102, 152, 0.25], [152, 203, 0.5]] },
+  'ds820-8x12': { label: 'DNP DS820 · 8x12" (110 copias)', capacity: 110, uses: [[203, 305, 1], [102, 152, 0.25], [152, 203, 0.5]] },
+  // --- Canon Selphy CP1500 ---
+  'cp1500-rp108': { label: 'Canon Selphy CP1500 · RP-108 (108 copias 10x15)', capacity: 108, uses: [[102, 152, 1]] },
+  'cp1500-kp108': { label: 'Canon Selphy CP1500 · KP-108IN (108 copias 10x15)', capacity: 108, uses: [[102, 152, 1]] },
+  'cp1500-kp36': { label: 'Canon Selphy CP1500 · KP-36IP (36 copias 10x15)', capacity: 36, uses: [[102, 152, 1]] },
+  // --- Fujifilm ASK-300 ---
+  'ask300-4x6': { label: 'Fuji ASK-300 · 4x6" (400 copias)', capacity: 400, uses: [[102, 152, 1]] },
+  'ask300-5x7': { label: 'Fuji ASK-300 · 5x7" (230 copias)', capacity: 230, uses: [[127, 178, 1]] },
+  'ask300-6x8': { label: 'Fuji ASK-300 · 6x8" (200 copias)', capacity: 200, uses: [[152, 203, 1]] },
+  // --- Mitsubishi CP-D90DW ---
+  'cpd90-4x6': { label: 'Mitsubishi CP-D90DW · 4x6" (400 copias)', capacity: 400, uses: [[102, 152, 1]] },
+  'cpd90-6x8': { label: 'Mitsubishi CP-D90DW · 6x8" (200 copias)', capacity: 200, uses: [[152, 203, 1], [102, 152, 0.5]] },
+  // --- HiTi P525L ---
+  'p525l-4x6': { label: 'HiTi P525L · 4x6" (500 copias)', capacity: 500, uses: [[102, 152, 1]] },
+  'p525l-5x7': { label: 'HiTi P525L · 5x7" (290 copias)', capacity: 290, uses: [[127, 178, 1]] },
+  'p525l-6x8': { label: 'HiTi P525L · 6x8" (220 copias)', capacity: 220, uses: [[152, 203, 1]] },
+  // --- Genérico ---
   custom: { label: 'Otro (hojas o copias)', capacity: 100, uses: [] }
 };
 const usesFor = (mediaId, wMm, hMm) => {

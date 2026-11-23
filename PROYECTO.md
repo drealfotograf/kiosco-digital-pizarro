@@ -864,3 +864,23 @@ cd kiosk && npm install && npm start
 - **Eslogan en dos líneas:** «Capturamos tus mejores recuerdos / Desde 1986» centrado en la pantalla de inicio (`Home.jsx`).
 - **Sub-navegación rediseñada:** estilo píldora moderno en Administración — fondo `surface-2`, botones sin borde, sombra en el activo (`styles.css`).
 - **Build, kiosco reiniciado y subido a GitHub.**
+
+### 19/11/2026 10:30 – 10:59 · Sesión cerrada (guardado automático, 29 min)
+- Archivos modificados:
+  - `kiosk/main/main.js`
+  - `kiosk/main/sources/bluetooth.js`
+  - `kiosk/renderer/src/screens/Sources.jsx`
+  - `kiosk/renderer/src/styles.css`
+
+### 20/11/2026 12:48 – 19:02 · Sesión cerrada (guardado automático, 374 min)
+- Sin cambios en archivos del proyecto.
+
+### 23/11/2026 · Ajustes de recepción BT/WiFi y múltiples impresoras
+- **Ajustes de recepción por Bluetooth y WiFi:**
+  - `presets.js`: nuevos campos `upload.enabled` (default true) y `bluetoothEnabled` (default true).
+  - `Admin.jsx`: checkboxes «Activar recepción de fotos por WiFi» y «Activar recepción de fotos por Bluetooth» en la pestaña Fuentes de fotos.
+  - `Sources.jsx`: las fuentes WiFi y Bluetooth se ocultan si están desactivadas en los ajustes.
+- **Múltiples impresoras — tipos de consumible:**
+  - `printers.js` (MEDIA): añadidos consumibles para Canon Selphy CP1500 (RP-108, KP-108IN, KP-36IP), DNP DS-RX1 (4x6", 5x7"), DNP DS820 (8x10", 8x12"), Fuji ASK-300 (4x6", 5x7", 6x8"), Mitsubishi CP-D90DW (4x6", 6x8") y HiTi P525L (4x6", 5x7", 6x8").
+  - Al poner un rollo nuevo, se elige el modelo de impresora y el tipo de papel entre todos los disponibles.
+- **Build correcto.**

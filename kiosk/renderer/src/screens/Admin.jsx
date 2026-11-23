@@ -463,6 +463,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
                 {!(s.shareFolders || []).length && <span className="muted small">Para usar carpetas de red, añádelas más abajo en «Carpetas compartidas».</span>}
               </div>
               <h2>WiFi del kiosco (QR)</h2>
+              {chk('upload.enabled', 'Activar recepción de fotos por WiFi')}
               <div className="form">
                 <label>Nombre de la red (SSID)</label>{txt('upload.wifiSsid')}
                 <label>Contraseña WiFi</label>{txt('upload.wifiPassword')}
@@ -476,6 +477,7 @@ export default function Admin({ pin: initialPin, onExit, toast, onReprocess }) {
               <div className="form"><label>Discos duros externos</label>{chk('showFixedDrives', 'Mostrar también discos USB no extraíbles')}</div>
 
               <h2>Bluetooth</h2>
+              {chk('bluetoothEnabled', 'Activar recepción de fotos por Bluetooth')}
               <div className="form">
                 <label>Carpeta de recepción</label>
                 <div className="row" style={{ flexWrap: 'nowrap' }}>{txt('bluetoothInbox')}<button className="btn sm" onClick={() => pick('bluetoothInbox')}>Elegir</button></div>

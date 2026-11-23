@@ -55,9 +55,8 @@
       "icon": "build/icon.png"
     },
     "nsis": {
-      "oneClick": false,
+      "oneClick": true,
       "perMachine": true,
-      "allowToChangeInstallationDirectory": true,
       "installerLanguages": ["es_ES"],
       "language": "1034",
       "shortcutName": "Kiosco Pizarro"

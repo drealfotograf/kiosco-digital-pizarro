@@ -891,4 +891,5 @@ cd kiosk && npm install && npm start
 - **Auto-descubrimiento de impresoras:**
   - `main.js`: escaneo periódico cada 30 s con `listPrinters()`. Cuando aparecen impresoras nuevas, envía `printers:discovered` al renderer.
   - `App.jsx`: muestra un toast al descubrir nuevas impresoras.
+- **CSP corregido:** añadido `font-src 'self' data:` al Content-Security-Policy de `index.html` para que las fuentes embebidas por Vite no se bloqueen (causaba pantalla en blanco).
 - **Build correcto.**

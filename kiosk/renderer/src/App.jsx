@@ -164,7 +164,8 @@ export default function App() {
       // Reimpresión automática: avisa al personal cuando la impresora falla y se reintenta
       on('print:retry', (d) => toast({ type: 'error', text: `⚠️ ${d.printer}: error al imprimir ${d.file}. Reintento ${d.attempt}/${d.maxRetries} en ${d.nextRetryIn} s…` })),
       on('print:retry-ok', (d) => toast({ type: 'ok', text: `✅ ${d.printer}: reimpresión correcta de ${d.file} (intento ${d.attempt})` })),
-      on('print:failed', (d) => toast({ type: 'error', text: `❌ ${d.printer}: no se pudo imprimir ${d.file} tras varios intentos. Revisa la impresora.` }))
+      on('print:failed', (d) => toast({ type: 'error', text: `❌ ${d.printer}: no se pudo imprimir ${d.file} tras varios intentos. Revisa la impresora.` })),
+      on('printers:discovered', (list) => toast({ type: 'ok', text: `🖨️ Nueva(s) impresora(s): ${list.map((p) => p.displayName).join(', ')}` }))
     ];
     return () => offs.forEach((f) => f());
   }, [toast, loadIntoRoll]);

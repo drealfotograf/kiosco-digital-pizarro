@@ -1,9 +1,10 @@
 import { BrowserWindow } from 'electron';
+import fs from 'node:fs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { app } from 'electron';
-import { getSettings } from './config.js';
+import { getSettings, dataDir } from './config.js';
 import { ds620Supports } from '../shared/presets.js';
 import { preparePrintFile, consumePrint } from './printers.js';
 export { ds620Supports };
@@ -157,10 +158,13 @@ function printRaw(file, { printer, wMm, hMm, copies, useDriverPaper }) {
   });
 }
 
-/** Encola un trabajo en la impresora indicada. wMm/hMm en vertical. */
+/** Encola un trabajo en la impresora indicada. wMm/hMm en vertical.
+ *  Persiste en disco para poder recuperarlo tras un corte de energía. */
 export function enqueuePrint(file, opts) {
+  const pid = String(++queueSeq) + '-' + Date.now();
+  savePending(pid, { file, printer: opts.printer, wMm: opts.wMm, hMm: opts.hMm, copies: opts.copies, useDriverPaper: opts.useDriverPaper });
   const prev = queues.get(opts.printer) || Promise.resolve();
-  const job = prev.catch(() => {}).then(() => printOne(file, opts));
+  const job = prev.catch(() => {}).then(() => printOne(file, opts)).finally(() => removePending(pid));
   queues.set(opts.printer, job);
   return job;
 }
@@ -170,3 +174,43 @@ export async function testPrint(printer, size, outFile) {
 }
 
 export const printFileName = (dir, name) => path.join(dir, name.replace(/[^\w.\-]/g, '_'));
+
+// ---------- Persistencia: recuperar trabajos tras corte de energía ----------
+const pendingFile = () => dataDir('print-pending.json');
+
+function savePending(id, entry) {
+  const all = loadAllPending();
+  all[id] = entry;
+  fs.mkdirSync(path.dirname(pendingFile()), { recursive: true });
+  fs.writeFileSync(pendingFile(), JSON.stringify(all, null, 2));
+}
+
+function removePending(id) {
+  const all = loadAllPending();
+  delete all[id];
+  try { fs.writeFileSync(pendingFile(), JSON.stringify(all, null, 2)); } catch { /* ok */ }
+}
+
+function loadAllPending() {
+  try { return JSON.parse(fs.readFileSync(pendingFile(), 'utf8')); } catch { return {}; }
+}
+
+/** Al arrancar, reencola los trabajos que quedaron pendientes tras un cierre inesperado. */
+export async function recoverPendingPrints() {
+  const all = loadAllPending();
+  const ids = Object.keys(all);
+  if (!ids.length) return 0;
+  let recovered = 0;
+  for (const id of ids) {
+    const j = all[id];
+    try {
+      await fsp.access(j.file);
+      enqueuePrint(j.file, { printer: j.printer, wMm: j.wMm, hMm: j.hMm, copies: j.copies, useDriverPaper: j.useDriverPaper });
+      recovered++;
+    } catch {
+      removePending(id);
+    }
+  }
+  return recovered;
+}
+

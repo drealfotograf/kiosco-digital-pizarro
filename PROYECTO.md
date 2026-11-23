@@ -510,7 +510,7 @@ El aviso emergente pide confirmación e incluye la opción «No avisar más en e
 - [ ] **Reiniciar el servidor de la tienda** para tener la Caja y la API de tickets. Hasta entonces, el kiosco guarda los tickets en local y los reenvía solo.
 - [ ] **Datos legales del titular** en Administración → General (razón social, NIF, dirección, correo). Hasta entonces el aviso legal muestra marcadores entre corchetes.
 - [ ] **Reiniciar el servidor de la tienda** para que tenga los nuevos puntos de exportación (`/api/export/folders` y el guardado por carpetas) y fijar su «carpeta raíz de exportación».
-- [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP o Mitsubishi) y ajustar los precios reales.
+- [ ] Probar con **impresoras reales** (tamaños de papel del driver, por ejemplo DNP, Canon Selphy, Fuji ASK, Mitsubishi o HiTi) y ajustar los precios reales.
 - [ ] Probar **móvil por cable** (Android e iPhone), **Bluetooth** y **correo IMAP** con dispositivos y buzón reales.
 - [ ] Revisar el diseño del **panel de administración del servidor** web (`server/public`) para igualarlo al nuevo estilo del kiosco.
 - [ ] Generar el **instalador** (`npm run dist`) y probarlo en el PC del kiosco. Valorar que la app arranque sola con Windows.
@@ -883,4 +883,12 @@ cd kiosk && npm install && npm start
 - **Múltiples impresoras — tipos de consumible:**
   - `printers.js` (MEDIA): añadidos consumibles para Canon Selphy CP1500 (RP-108, KP-108IN, KP-36IP), DNP DS-RX1 (4x6", 5x7"), DNP DS820 (8x10", 8x12"), Fuji ASK-300 (4x6", 5x7", 6x8"), Mitsubishi CP-D90DW (4x6", 6x8") y HiTi P525L (4x6", 5x7", 6x8").
   - Al poner un rollo nuevo, se elige el modelo de impresora y el tipo de papel entre todos los disponibles.
+- **Recuperación tras corte de energía:**
+  - `print.js`: la cola de impresión se persiste en disco (`print-pending.json` en userData). Cada trabajo se escribe antes de imprimir y se borra al completar o fallar. Al arrancar, `recoverPendingPrints()` reencola los trabajos que quedaron pendientes.
+  - `main.js`: llama a `recoverPendingPrints()` en el arranque, justo después de `purgeStaleSessions()`.
+  - La recepción WiFi/BT ya es resiliente: los archivos se guardan en disco (sesión o inbox) antes de procesarse.
+  - El servidor de upload ahora respeta `upload.enabled` (antes arrancaba siempre).
+- **Auto-descubrimiento de impresoras:**
+  - `main.js`: escaneo periódico cada 30 s con `listPrinters()`. Cuando aparecen impresoras nuevas, envía `printers:discovered` al renderer.
+  - `App.jsx`: muestra un toast al descubrir nuevas impresoras.
 - **Build correcto.**

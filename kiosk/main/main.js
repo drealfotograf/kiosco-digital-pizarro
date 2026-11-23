@@ -16,7 +16,7 @@ import { startEmailWatch, stopEmailWatch, emailStatus, testEmail } from './sourc
 import { openBluetoothReceiver, closeBluetoothReceiver, bluetoothInbox, recentBluetoothFiles } from './sources/bluetooth.js';
 import { listServerShare, downloadServerFile } from './sources/srvshare.js';
 import { ensureSampleMasks, renderPhotoBuffer, saveJpeg } from './render.js';
-import { listPrinters, testPrint, simFolder, enqueuePrint, getPrintQueue } from './print.js';
+import { listPrinters, testPrint, simFolder, enqueuePrint, getPrintQueue, recoverPendingPrints } from './print.js';
 import { MEDIA, mediaStatus, changeRoll, listProfiles, importProfiles, setPrinterColor } from './printers.js';
 import { submitOrder, quote, printableSizes, holdOrder, repeatOrder, retryOrder, releaseOrder, findAwaiting, pollTickets, orderState } from './orders.js';
 import { retryTickets } from './ticket.js';
@@ -541,7 +541,25 @@ app.whenReady().then(async () => {
   await session.purgeStaleSessions();
   purgeOrders().catch(() => {});
   setInterval(() => purgeOrders().catch(() => {}), 6 * 3600_000);
-  startUploadServer();
+  if (getSettings().upload?.enabled !== false) startUploadServer();
+  recoverPendingPrints().then((n) => { if (n) console.log(`Recuperados ${n} trabajo(s) de impresión pendientes`); }).catch(() => {});
+  // Descubrimiento periódico de impresoras: notifica al renderer cuando aparecen nuevas
+  let knownPrinters = new Set();
+  const scanPrinters = async () => {
+    try {
+      const list = await listPrinters();
+      const names = new Set(list.map((p) => p.name));
+      const newOnes = list.filter((p) => !knownPrinters.has(p.name));
+      if (newOnes.length && knownPrinters.size) {
+        for (const w of BrowserWindow.getAllWindows()) {
+          if (!w.isDestroyed()) w.webContents.send('printers:discovered', newOnes);
+        }
+      }
+      knownPrinters = names;
+    } catch { /* sin impresoras */ }
+  };
+  scanPrinters();
+  setInterval(scanPrinters, 30_000);
   startRetryLoop((msg) => console.log(msg));
   startBackupScheduler((msg) => console.log(msg));
   // Tickets: reenvío de los que no llegaron y consulta de ventas confirmadas o anuladas en caja.
